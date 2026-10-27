@@ -1,9 +1,9 @@
 {
 	"css.customData": [".vscode/gnome-css.json"],
-	"editor.defaultFormatter": "esbenp.prettier-vscode",
+	"editor.defaultFormatter": "oxc.oxc-vscode",
 	"editor.formatOnSave": true,
 	"editor.codeActionsOnSave": {
-		"source.fixAll.eslint": "always",
+		"source.fixAll.oxc": "always"
 	},
 	"search.exclude": {
 		"node_modules": true,

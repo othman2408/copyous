@@ -32,7 +32,7 @@ async function waitForExtensionState(): Promise<CopyousExtension> {
 			}
 		}
 
-		// eslint-disable-next-line no-await-in-loop
+		// oxlint-disable-next-line no-await-in-loop
 		await Scripting.sleep(1000);
 	}
 

@@ -1,8 +1,6 @@
-# Constants
 NAME := copyous
 UUID := copyous@boerdereinar.dev
 
-# Directories
 SRC_DIR := src
 TESTS_DIR := tests
 DIST_DIR := dist
@@ -33,27 +31,24 @@ ifeq (, $(shell command -V sqlite3))
 endif
 endif
 
-# Targets
+.DELETE_ON_ERROR:
+
 .PHONY: all clean
 .PHONY: database
-.PHONY: lint
+.PHONY: lint lint-fix typecheck test-lint test-tooling
 .PHONY: pot po check-pot check-po
 .PHONY: build install uninstall
 .PHONY: launch launch-profile launch-settings
 .PHONY: test test-unit
 
-# Default target
 all: $(DIST_ZIP)
 
-# Clean
 clean:
 	rm -rf $(DIST_DIR)
 
-# Dist
 $(DIST_DIR):
 	@mkdir -p $@
 
-# Database
 database: | $(DIST_DIR)
 ifeq ($(DBPATH),$(DATABASE))
 	@rm -f $(DBPATH)
@@ -62,19 +57,21 @@ ifeq ($(DBPATH),$(DATABASE))
 	cat resources/database/json.sql | sqlite3 $(DBPATH) > $(patsubst %.db,%.json,$(DBPATH))
 endif
 
-# Lint
-lint:
-	pnpm exec eslint src --ext .ts
-	pnpm exec prettier src resources/css --check
+typecheck:
+	pnpm exec tsc -p ./tsconfig.src.json --noEmit --tsBuildInfoFile $(DIST_DIR)/lint.tsbuildinfo
+	pnpm exec tsc -p ./tsconfig.tools.json
+
+lint: typecheck
+	pnpm exec oxlint src --report-unused-disable-directives
+	pnpm exec oxfmt src resources/css scripts tests/lint tests/tooling .oxlintrc.json .oxfmtrc.json --check
 
 lint-fix:
-	pnpm exec eslint src --ext .ts --fix
-	pnpm exec prettier src resources/css --write
+	pnpm exec oxlint src --fix --report-unused-disable-directives
+	pnpm exec oxfmt src resources/css scripts tests/lint tests/tooling .oxlintrc.json .oxfmtrc.json --write
 
 shexli: $(DIST_ZIP)
-	uv run python -m shexli $< --format json | pnpm tsx ./scripts/shexli/transform-output.ts
+	uv run python -m shexli $< --format json | node ./scripts/shexli/transform-output.ts
 
-# Localization
 resources/po/main.pot: $(SRC)
 	find src -name '*.ts' \
 	| xargs xgettext \
@@ -108,7 +105,6 @@ check-pot:
 check-po:
 	find resources/po -name '*.po' -exec msgcmp --use-untranslated {} resources/po/main.pot \;
 
-# Copy metadata
 VERSION ?= $(shell git describe --tags --dirty | sed -E 's/^v//;s/-g([0-9a-f]{7})/+\1/')
 BRANCH := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null)
 ifneq ($(filter main master HEAD,$(BRANCH)),$(BRANCH))
@@ -118,8 +114,7 @@ endif
 $(DIST_DIR)/metadata.json: resources/metadata.json | $(DIST_DIR)
 	jq '."version-name" = "$(VERSION)"' $< > $@
 
-# TypeScript
-$(DIST_DIR)/extension.js: $(SRC) tsconfig.json tsconfig.src.json | $(DIST_DIR)
+$(DIST_DIR)/extension.js: $(SRC) tsconfig.json tsconfig.src.json package.json pnpm-lock.yaml | $(DIST_DIR)
 ifeq ($(RELEASE),1)
 	pnpm exec tsc -p ./tsconfig.src.json
 	pnpm exec tsc-alias -p ./tsconfig.src.json
@@ -127,8 +122,7 @@ ifeq ($(RELEASE),1)
 # Remove code blocks commented with /* DEBUG-ONLY */ or lines ending with // DEBUG-ONLY
 	find $(@D) -name '*.js' -exec perl -0777 -i -pe 's/^(\s*)\/\* DEBUG-ONLY \*\/(?:.|\n)*?^\1\}|\/\/ DEBUG-ONLY.*\n.*$$//gm' {} \;
 # Format code to make it easier for EGO reviewers
-	-pnpm exec eslint $(DIST_DIR) --config ./format.eslint.config.js --fix --cache --cache-location=$(DIST_DIR)/.eslintcache
-	pnpm exec prettier $(DIST_DIR) --ignore-path= --log-level=warn --write --cache --cache-location=$(DIST_DIR)/.prettiercache
+	find $(DIST_DIR) -name '*.js' -exec pnpm exec oxfmt --write {} +
 else
 	pnpm exec tsc --sourceMap --sourceRoot src -p ./tsconfig.src.json
 	pnpm exec tsc-alias -p ./tsconfig.src.json
@@ -139,12 +133,11 @@ endif
 
 TSC := $(DIST_DIR)/extension.js
 
-# CSS
 # Rule for css/stylesheet-{theme}-{type}.css
 define theme_rule
 $$(DIST_DIR)/css/stylesheet-$(1)-$(2).css: \
 		resources/css/themes/$(1)/$(2).scss resources/css/themes/$(1)/gnome-shell-sass/_*.scss \
-		resources/css/themes/default/_*.scss resources/css/themes/default/widgets/_*.scss | $$(DIST_DIR)
+		resources/css/themes/default/_*.scss resources/css/themes/default/widgets/_*.scss pnpm-lock.yaml | $$(DIST_DIR)
 	@mkdir -p $$(DIST_DIR)/css
 	pnpm exec sass --no-source-map --load-path=resources/css/themes/default --load-path=resources/css/themes/$(1)/gnome-shell-sass --quiet-deps $$<:$$@
 	sed -i -re ':a; s%(.*)/\*.*\*/%\1%; ta; /\/\*/ !b; N; ba' $$@ # Remove multiline comments
@@ -157,14 +150,13 @@ THEME_CSS := $(foreach pair,$(THEME_VARIANTS),$(DIST_DIR)/css/stylesheet-$(word 
 $(foreach pair,$(THEME_VARIANTS),$(eval $(call theme_rule,$(word 1,$(subst /, ,$(pair))),$(word 2,$(subst /, ,$(pair))))))
 
 $(DIST_DIR)/css/template-%.css: \
-		resources/css/template.scss scripts/template/postcss.config.cjs \
-		resources/css/themes/default/_*.scss resources/css/themes/default/widgets | $(DIST_DIR)
+		resources/css/template.scss scripts/template/postcss.config.cjs scripts/template/build.mjs \
+		resources/css/themes/default/_*.scss resources/css/themes/default/widgets pnpm-lock.yaml | $(DIST_DIR)
 	@mkdir -p $(DIST_DIR)/css
-	VARIANT=$* pnpm exec postcss $< --config scripts/template | pnpm exec sass --no-source-map --stdin $@
+	VARIANT=$* node scripts/template/build.mjs | pnpm exec sass --no-source-map --stdin $@
 
 CSS := $(THEME_CSS) $(DIST_DIR)/css/template-dark.css $(DIST_DIR)/css/template-light.css
 
-# Schemas
 SCHEMAS := $(patsubst resources/schemas/%.gschema.xml,$(DIST_DIR)/schemas/%.gschema.xml,$(wildcard resources/schemas/*.gschema.xml))
 ifneq ($(DEBUG_SCHEMA),)
 DEBUG_SCHEMAS := $(patsubst %.gschema.xml,%.debug.gschema.xml,$(SCHEMAS))
@@ -180,7 +172,6 @@ $(DEBUG_SCHEMAS): $(DIST_DIR)/schemas/%.debug.gschema.xml: resources/schemas/%.g
 	$(eval SLASHED := $(subst .,\/, $*))
 	@sed -e 's/$(ESCAPED)/$(ESCAPED).debug/g' -e 's/$(SLASHED)/$(SLASHED)\/debug/g' $< > $@
 
-# Resources
 $(DIST_DIR)/resources.gresource: resources/resources.gresource.xml resources/css/prefs.css | $(DIST_DIR)
 	glib-compile-resources --target=$@ --sourcedir=resources $<
 
@@ -189,7 +180,6 @@ $(DIST_DIR)/theme.gresource: resources/theme.gresource.xml $(CSS) | $(DIST_DIR)
 
 RESOURCES := $(DIST_DIR)/resources.gresource $(DIST_DIR)/theme.gresource
 
-# Build all
 $(DIST_ZIP): $(DIST_DIR)/metadata.json $(TSC) $(CSS) $(SCHEMAS) $(DEBUG_SCHEMAS) $(RESOURCES) | $(DIST_DIR)
 	gnome-extensions pack $(DIST_DIR) -o $(@D) \
 		--force \
@@ -204,7 +194,6 @@ $(DIST_ZIP): $(DIST_DIR)/metadata.json $(TSC) $(CSS) $(SCHEMAS) $(DEBUG_SCHEMAS)
 
 build: $(DIST_ZIP)
 
-# Install
 INSTALL_TARGET := $(or $(shell gnome-extensions info $(UUID) 2>/dev/null | awk -F': ' '/Path:/ {print $$2}'), install-new)
 ifeq ($(INSTALL_TARGET),)
 .PHONY = install-new
@@ -219,7 +208,6 @@ install: $(INSTALL_TARGET)
 uninstall:
 	gnome-extensions uninstall $(UUID)
 
-# Launch
 HAS_DEVKIT := $(shell gnome-shell --help | grep -q -- --devkit && echo 1)
 MUTTER_DEVKIT := $(wildcard $(or $(shell command -V mutter-devkit 2>/dev/null), /usr/libexec/mutter-devkit))
 
@@ -249,9 +237,14 @@ launch-settings: install
     while kill -0 $$PID 2> /dev/null; do sleep .5; done; \
 	kill $$JOURNAL_PID; kill $$DCONF_PID;
 
-# Test
-$(DIST_DIR)/tests.tsbuildinfo: $(TESTS) tsconfig.json tsconfig.tests.json | $(DIST_DIR)
+$(DIST_DIR)/tests.tsbuildinfo: $(TSC) $(TESTS) tsconfig.json tsconfig.tests.json package.json pnpm-lock.yaml | $(DIST_DIR)
 	pnpm exec tsc -p ./tsconfig.tests.json
+
+test-lint:
+	node --test tests/lint/*.test.mjs
+
+test-tooling:
+	node --test tests/tooling/*.test.mjs
 
 test-unit: $(TSC)
 	node --test tests/unit/*.test.mjs
@@ -259,6 +252,6 @@ test-unit: $(TSC)
 	gjs -m tests/runtime/sqlite.js
 	gjs -m tests/runtime/worker.js
 
-test: $(DIST_DIR)/tests.tsbuildinfo $(DIST_ZIP) database test-unit
+test: $(DIST_DIR)/tests.tsbuildinfo $(DIST_ZIP) database test-unit test-lint test-tooling
 	cp $(SHELL_TEST_JS) $(DIST_DIR)/tests/shell/
 	bash ./tests/run-tests.sh

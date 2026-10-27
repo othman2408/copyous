@@ -17,7 +17,7 @@ export async function readBounded(
 		while (true) {
 			if (truncate && length === limit) break;
 			// Reads are deliberately sequential, with at most one chunk in flight.
-			// eslint-disable-next-line no-await-in-loop
+			// oxlint-disable-next-line no-await-in-loop
 			const bytes = await stream.read_bytes_async(
 				Math.min(65536, limit - length + (truncate ? 0 : 1)),
 				GLib.PRIORITY_DEFAULT,

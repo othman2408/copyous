@@ -1,5 +1,5 @@
 /* Requests, writes and grammar registrations must remain ordered, with bounded memory. */
-/* eslint-disable no-await-in-loop */
+/* oxlint-disable no-await-in-loop */
 // Standalone GJS process. Never import GNOME Shell UI modules here.
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';

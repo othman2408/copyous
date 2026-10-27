@@ -7,7 +7,7 @@ export async function forEachCooperatively<T>(items: Iterable<T>, callback: (ite
 		callback(item);
 		if (GLib.get_monotonic_time() < deadline) continue;
 		// Signal attachment and teardown are ordered; yield between batches, not within an entry.
-		// eslint-disable-next-line no-await-in-loop
+		// oxlint-disable-next-line no-await-in-loop
 		await new Promise<void>((resolve) => {
 			GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
 				resolve();

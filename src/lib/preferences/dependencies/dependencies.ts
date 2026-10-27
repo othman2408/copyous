@@ -279,7 +279,7 @@ async function downloadHljs(prefs: ExtensionPreferences, cancellable: Gio.Cancel
 		if (prefUrl) prefs.getLogger().warn(`Failed to download highlight.js from '${prefUrl}'. Trying next cdn`);
 		prefUrl = url;
 
-		// eslint-disable-next-line no-await-in-loop
+		// oxlint-disable-next-line no-await-in-loop
 		if (await downloadHljsModule(prefs, url, HljsSha512, path, cancellable)) {
 			return true;
 		}
@@ -304,7 +304,7 @@ export async function downloadHljsLanguage(
 				.warn(`Failed to download highlight.js language '${language}' from '${prefUrl}'. Trying next cdn`);
 		prefUrl = url;
 
-		// eslint-disable-next-line no-await-in-loop
+		// oxlint-disable-next-line no-await-in-loop
 		if (await downloadHljsModule(prefs, url, hash, path, cancellable)) {
 			return true;
 		}

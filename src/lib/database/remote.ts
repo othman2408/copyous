@@ -56,7 +56,7 @@ export class RemoteDatabase implements Database {
 		const entries: ClipboardEntry[] = [];
 		while (true) {
 			// Each page is requested only after the preceding page has been consumed.
-			// eslint-disable-next-line no-await-in-loop
+			// oxlint-disable-next-line no-await-in-loop
 			const page = await this.worker.request<{ entries: EntryData[]; more: boolean }>('entries');
 			entries.push(...page.entries.map(decodeEntry));
 			if (!page.more) return entries;

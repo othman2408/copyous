@@ -15,7 +15,7 @@ export async function mediaDuration(uri: string): Promise<number | null> {
 		if (!success) {
 			pipeline.set_state(Gst.State.PLAYING);
 			for (let i = 0; i < 6 && !success; i++) {
-				// eslint-disable-next-line no-await-in-loop
+				// oxlint-disable-next-line no-await-in-loop
 				await delay(50, new Gio.Cancellable());
 				[success, duration] = pipeline.query_duration(Gst.Format.TIME);
 			}

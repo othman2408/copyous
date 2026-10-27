@@ -1,0 +1,12 @@
+{
+	"extends": "@tsconfig/strictest/tsconfig.json",
+	"compilerOptions": {
+		"module": "NodeNext",
+		"target": "ES2024",
+		"types": ["node"],
+		"noEmit": true,
+		"erasableSyntaxOnly": true,
+		"verbatimModuleSyntax": true
+	},
+	"include": ["scripts/**/*.ts"]
+}

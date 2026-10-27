@@ -224,7 +224,7 @@ export class ClipboardScrollContainer extends St.BoxLayout {
 					if (batch.length >= 32 || size > 128 * 1024) break;
 				}
 				// Backpressure prevents buffering the complete history in IPC messages.
-				// eslint-disable-next-line no-await-in-loop
+				// oxlint-disable-next-line no-await-in-loop
 				await worker.request('index', batch);
 				if (cancellable.is_cancelled() || this.disposed) return;
 			}

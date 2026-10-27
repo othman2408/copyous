@@ -1,6 +1,8 @@
 /// <reference types="node" />
 import * as fs from 'node:fs';
-import { RawSourceMap, SourceMapConsumer } from 'source-map';
+import { SourceMap, type SourceMapPayload } from 'node:module';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 type Evidence = {
 	path: string;
@@ -76,6 +78,7 @@ function logEvidence(finding: Finding, evidence: Evidence) {
 }
 
 const result = JSON.parse(fs.readFileSync(0, 'utf8')) as AnalysisResult;
+const sourceMaps = new Map<string, { map: SourceMap; root: string; lines: string[] }>();
 
 let hasErrors = false;
 for (const finding of result.findings) {
@@ -92,19 +95,41 @@ for (const finding of result.findings) {
 		}
 
 		const path = `dist/sourcemaps/${evidence.path}.map`;
-		const map = JSON.parse(fs.readFileSync(path, 'utf8')) as RawSourceMap;
+		if (!fs.existsSync(path)) {
+			evidence.path = `dist/${evidence.path}`;
+			logEvidence(finding, evidence);
+			continue;
+		}
 
-		// eslint-disable-next-line no-await-in-loop
-		const consumer = await new SourceMapConsumer(map);
-		const position = consumer.originalPositionFor({
-			line: evidence.line ?? 1,
-			column: 0,
-			bias: SourceMapConsumer.LEAST_UPPER_BOUND,
-		});
-		consumer.destroy();
-
-		evidence.path = `${map.sourceRoot}${map.sources[0]}`;
-		evidence.line = position.line;
+		let cached = sourceMaps.get(path);
+		if (!cached) {
+			const payload = JSON.parse(fs.readFileSync(path, 'utf8')) as SourceMapPayload & { sourceRoot?: string };
+			cached = {
+				map: new SourceMap(payload),
+				root: payload.sourceRoot ?? '',
+				lines: fs.readFileSync(`dist/${evidence.path}`, 'utf8').split('\n'),
+			};
+			sourceMaps.set(path, cached);
+		}
+		const line = (evidence.line ?? 1) - 1;
+		const column = Math.max(0, cached.lines[line]?.search(/\S/) ?? 0);
+		const position = cached.map.findEntry(line, column);
+		if ('originalSource' in position && position.originalSource && position.generatedLine === line) {
+			const source = position.originalSource;
+			const url = URL.canParse(source)
+				? new URL(source)
+				: URL.canParse(cached.root)
+					? new URL(source, cached.root)
+					: null;
+			evidence.path = url
+				? url.protocol === 'file:'
+					? fileURLToPath(url)
+					: url.href
+				: join(cached.root, source);
+			evidence.line = position.originalLine + 1;
+		} else {
+			evidence.path = `dist/${evidence.path}`;
+		}
 		logEvidence(finding, evidence);
 	}
 }

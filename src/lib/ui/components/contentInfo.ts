@@ -284,7 +284,7 @@ export async function tryCreateDirectoryFileInfo(
 		let fileCount = 0;
 		try {
 			while (!cancellable.is_cancelled()) {
-				// eslint-disable-next-line no-await-in-loop
+				// oxlint-disable-next-line no-await-in-loop
 				const files = await enumerator.next_files_async(64, GLib.PRIORITY_DEFAULT, cancellable);
 				if (files.length === 0) break;
 				for (const f of files) {

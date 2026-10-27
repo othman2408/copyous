@@ -1,0 +1,33 @@
+{
+	"$schema": "./node_modules/oxfmt/configuration_schema.json",
+	"semi": true,
+	"trailingComma": "all",
+	"singleQuote": true,
+	"printWidth": 120,
+	"quoteProps": "consistent",
+	"sortPackageJson": false,
+	"ignorePatterns": ["pnpm-lock.yaml", "**/gnome-shell-sass/**", "src/thirdparty/**"],
+	"sortImports": {
+		"customGroups": [
+			{
+				"groupName": "gnome",
+				"elementNamePattern": ["gi://*", "cairo*"]
+			},
+			{
+				"groupName": "shell",
+				"elementNamePattern": ["resource://**"]
+			}
+		],
+		"groups": [
+			"gnome",
+			"shell",
+			["builtin", "external", "subpath", "internal"],
+			["parent", "sibling", "index"],
+			"unknown"
+		],
+		"newlinesBetween": true,
+		"partitionByComment": true,
+		"sortSideEffects": false,
+		"ignoreCase": false
+	}
+}

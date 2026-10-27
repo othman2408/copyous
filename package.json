@@ -5,44 +5,37 @@
 	"type": "module",
 	"private": true,
 	"devDependencies": {
-		"@eslint/js": "10.0.1",
 		"@girs/gda-5.0": "5.5.0",
-		"@girs/gda-6.0": "6.0.0-4.0.0-beta.38",
+		"@girs/gda-6.0": "5.5.0",
 		"@girs/gjs": "5.5.0",
 		"@girs/gnome-shell": "50.0.4",
 		"@girs/gsound-1.0": "5.5.0",
 		"@girs/gst-1.0": "5.5.0",
 		"@girs/soup-3.0": "5.5.0",
-		"@stylistic/eslint-plugin": "5.10.0",
-		"@trivago/prettier-plugin-sort-imports": "6.0.2",
 		"@tsconfig/strictest": "2.0.8",
 		"@types/node": "26.6.5",
-		"@typescript-eslint/eslint-plugin": "8.71.1",
-		"@typescript-eslint/parser": "8.71.1",
-		"eslint": "10.12.0",
-		"eslint-config-prettier": "10.1.8",
 		"highlight.js": "11.12.0",
-		"postcss": "8.5.29",
-		"postcss-cli": "12.0.0",
-		"postcss-import": "17.0.0",
+		"oxfmt": "0.75.0",
+		"oxlint": "1.90.0",
+		"oxlint-tsgolint": "7.0.2005",
+		"postcss": "8.5.32",
+		"postcss-import": "17.0.1",
 		"postcss-scss": "4.0.9",
-		"prettier": "3.9.9",
-		"sass": "1.105.1",
-		"source-map": "0.8.0",
-		"tsc-alias": "1.9.7",
-		"tslib": "2.8.1",
-		"tsx": "4.23.15",
-		"typescript": "6.0.3",
-		"typescript-eslint": "8.71.1"
+		"sass-embedded": "1.106.1",
+		"tsc-alias": "1.9.9",
+		"typescript": "7.0.2"
 	},
 	"scripts": {
 		"build": "make build",
-		"install": "make install",
 		"launch": "make launch",
 		"launch-settings": "make launch-settings",
 		"test": "make test",
 		"lint": "make lint",
 		"lint-fix": "make lint-fix",
-		"shexli": "make shexli"
+		"shexli": "make shexli",
+		"install-extension": "make install"
+	},
+	"engines": {
+		"node": ">=24.12.0"
 	}
 }
