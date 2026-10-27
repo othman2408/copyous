@@ -1,6 +1,9 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.13"
+
+[manifest]
+constraints = [{ name = "tree-sitter", specifier = "<0.26" }]
 
 [[package]]
 name = "copyous"

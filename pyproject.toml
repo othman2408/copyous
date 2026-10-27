@@ -5,3 +5,7 @@ requires-python = ">=3.13"
 dependencies = [
     "shexli>=0.2.1",
 ]
+
+[tool.uv]
+# shexli 0.2.1 crashes with tree-sitter 0.26 during extension analysis.
+constraint-dependencies = ["tree-sitter<0.26"]
