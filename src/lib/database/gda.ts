@@ -94,132 +94,123 @@ function unescape_sql(connection: Gda5.Connection, builder: Gda5.SqlBuilder | Sq
 	return connection.parse_sql_string(unescapedSql)[0];
 }
 
-function async_statement_execute_select<T>(
+/** Poll the Gda 5 worker without imposing 100 ms latency on every statement. */
+function fetchResult(
+	connection: Gda5.Connection,
+	id: number,
+	cancellable: Gio.Cancellable,
+): Promise<[GObject.Object, Gda5.Set | null]> {
+	let sourceId = 0;
+	let cancelId = 0;
+	const pending = new Promise<[GObject.Object, Gda5.Set | null]>((resolve, reject: (error: Error) => void) => {
+		if (cancellable.is_cancelled()) {
+			connection.async_cancel(id);
+			reject(new Error('Database operation cancelled'));
+			return;
+		}
+		const deadline = GLib.get_monotonic_time() + 30 * GLib.USEC_PER_SEC;
+		let delay = 2;
+		const poll = (): boolean => {
+			sourceId = 0;
+			try {
+				const result = connection.async_fetch_result(id);
+				if (result[0]) {
+					resolve(result);
+					return GLib.SOURCE_REMOVE;
+				}
+				if (GLib.get_monotonic_time() >= deadline) {
+					connection.async_cancel(id);
+					throw new Error('Database operation timed out');
+				}
+				delay = Math.min(delay * 2, 50);
+				sourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, poll);
+			} catch (error) {
+				reject(error as Error);
+			}
+			return GLib.SOURCE_REMOVE;
+		};
+		sourceId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, delay, poll);
+		cancelId = cancellable.connect(() => {
+			if (sourceId) GLib.source_remove(sourceId);
+			sourceId = 0;
+			try {
+				connection.async_cancel(id);
+			} catch {
+				/* Connection may already be closing. */
+			}
+			reject(new Error('Database operation cancelled'));
+		});
+	});
+	return pending.finally(() => {
+		// Never disconnect a cancellable from inside its cancellation callback.
+		if (cancelId) cancellable.disconnect(cancelId);
+		if (sourceId) GLib.source_remove(sourceId);
+	});
+}
+
+async function async_statement_execute_select<T>(
 	Gda: typeof Gda5 | typeof Gda6,
 	connection: Gda5.Connection | Gda6.Connection,
 	statement: Gda5.Statement | Gda6.Statement,
 	cancellable: Gio.Cancellable,
 ): Promise<DataModel<T>> {
-	return new Promise((resolve, reject: (reason: Error) => void) => {
-		if ('async_statement_execute' in connection) {
-			// Gda 5
-			const id = connection.async_statement_execute(
-				statement as Gda5.Statement,
-				null,
-				Gda.StatementModelUsage.RANDOM_ACCESS as Gda5.StatementModelUsage,
-				null,
-				false,
-			);
-
-			let i = 0;
-			const timeoutId = GLib.timeout_add(GLib.PRIORITY_HIGH, 100, () => {
-				try {
-					const [result] = connection.async_fetch_result(id);
-					if (result) {
-						if (result instanceof Gda.DataModel) {
-							resolve(result as DataModel<T>);
-						} else {
-							reject(new Error('Statement is not a selection statement'));
-						}
-						cancellable.disconnect(cancellableId);
-						return GLib.SOURCE_REMOVE;
-					}
-
-					if (i >= 10) {
-						reject(new Error('Timeout'));
-						cancellable.disconnect(cancellableId);
-						return GLib.SOURCE_REMOVE;
-					}
-
-					i++;
-					cancellable.disconnect(cancellableId);
-					return GLib.SOURCE_CONTINUE;
-				} catch (error) {
-					reject(error as Error);
-					cancellable.disconnect(cancellableId);
-					return GLib.SOURCE_REMOVE;
-				}
-			});
-
-			const cancellableId = cancellable.connect(() => GLib.source_remove(timeoutId));
-		} else {
-			// Gda 6
-			GLib.idle_add(GLib.PRIORITY_HIGH, () => {
-				try {
-					const datamodel = connection.statement_execute_select(statement as Gda6.Statement, null);
-					resolve(datamodel as unknown as DataModel<T>);
-				} catch (error) {
-					reject(error as Error);
-				}
-
-				return GLib.SOURCE_REMOVE;
-			});
-		}
+	if (cancellable.is_cancelled()) throw new Error('Database operation cancelled');
+	if ('async_statement_execute' in connection) {
+		const id = connection.async_statement_execute(
+			statement as Gda5.Statement,
+			null,
+			Gda.StatementModelUsage.RANDOM_ACCESS as Gda5.StatementModelUsage,
+			null,
+			false,
+		);
+		const [result] = await fetchResult(connection, id, cancellable);
+		if (!(result instanceof Gda.DataModel)) throw new Error('Statement is not a selection statement');
+		return result as DataModel<T>;
+	}
+	return new Promise((resolve, reject: (error: Error) => void) => {
+		GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+			try {
+				if (cancellable.is_cancelled()) throw new Error('Database operation cancelled');
+				resolve(
+					connection.statement_execute_select(statement as Gda6.Statement, null) as unknown as DataModel<T>,
+				);
+			} catch (error) {
+				reject(error as Error);
+			}
+			return GLib.SOURCE_REMOVE;
+		});
 	});
 }
 
-function async_statement_execute_non_select(
+async function async_statement_execute_non_select(
 	Gda: typeof Gda5 | typeof Gda6,
 	connection: Gda5.Connection | Gda6.Connection,
 	statement: Gda5.Statement | Gda6.Statement,
 	cancellable: Gio.Cancellable,
 ): Promise<[number, Gda5.Set | Gda6.Set | null]> {
-	return new Promise((resolve, reject: (reason: Error) => void) => {
-		if ('async_statement_execute' in connection) {
-			// Gda 5
-			const id = connection.async_statement_execute(
-				statement as Gda5.Statement,
-				null,
-				Gda.StatementModelUsage.RANDOM_ACCESS as Gda5.StatementModelUsage,
-				null,
-				true,
-			);
-
-			let i = 0;
-			const timeoutId = GLib.timeout_add(GLib.PRIORITY_HIGH, 100, () => {
-				try {
-					const [result, lastRow] = connection.async_fetch_result(id);
-					if (result) {
-						if (result instanceof Gda.Set) {
-							const rows = result.get_holder_value('IMPACTED_ROWS') as number | null;
-							resolve([rows ?? -2, lastRow]);
-						} else {
-							reject(new Error('Statement is a selection statement'));
-						}
-						cancellable.disconnect(cancellableId);
-						return GLib.SOURCE_REMOVE;
-					}
-
-					if (i >= 10) {
-						reject(new Error('Timeout'));
-						cancellable.disconnect(cancellableId);
-						return GLib.SOURCE_REMOVE;
-					}
-
-					i++;
-					cancellable.disconnect(cancellableId);
-					return GLib.SOURCE_CONTINUE;
-				} catch (error) {
-					reject(error as Error);
-					cancellable.disconnect(cancellableId);
-					return GLib.SOURCE_REMOVE;
-				}
-			});
-
-			const cancellableId = cancellable.connect(() => GLib.source_remove(timeoutId));
-		} else {
-			// Gda 6
-			GLib.idle_add(GLib.PRIORITY_HIGH, () => {
-				try {
-					const result = connection.statement_execute_non_select(statement as Gda6.Statement, null);
-					resolve(result);
-				} catch (error) {
-					reject(error as Error);
-				}
-
-				return GLib.SOURCE_REMOVE;
-			});
-		}
+	if (cancellable.is_cancelled()) throw new Error('Database operation cancelled');
+	if ('async_statement_execute' in connection) {
+		const id = connection.async_statement_execute(
+			statement as Gda5.Statement,
+			null,
+			Gda.StatementModelUsage.RANDOM_ACCESS as Gda5.StatementModelUsage,
+			null,
+			true,
+		);
+		const [result, lastRow] = await fetchResult(connection, id, cancellable);
+		if (!(result instanceof Gda.Set)) throw new Error('Statement is a selection statement');
+		return [(result.get_holder_value('IMPACTED_ROWS') as number | null) ?? -2, lastRow];
+	}
+	return new Promise((resolve, reject: (error: Error) => void) => {
+		GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+			try {
+				if (cancellable.is_cancelled()) throw new Error('Database operation cancelled');
+				resolve(connection.statement_execute_non_select(statement as Gda6.Statement, null));
+			} catch (error) {
+				reject(error as Error);
+			}
+			return GLib.SOURCE_REMOVE;
+		});
 	});
 }
 
@@ -232,15 +223,13 @@ function unescapeContent(content: string): string {
  * Database with Gda backend
  */
 export class GdaDatabase implements Database {
+	private readonly logger;
 	private readonly _Gda: typeof Gda;
 	private readonly _connection: Gda.Connection;
 	private readonly _cancellable: Gio.Cancellable = new Gio.Cancellable();
 
-	constructor(
-		private ext: CopyousExtension,
-		gda: typeof Gda,
-		file: Gio.File | null,
-	) {
+	constructor(ext: CopyousExtension, gda: typeof Gda, file: Gio.File | null) {
+		this.logger = ext.logger;
 		this._Gda = gda;
 
 		let cncString: string;
@@ -262,7 +251,7 @@ export class GdaDatabase implements Database {
 
 	public async init(): Promise<void> {
 		await open_async(this._connection);
-		this.ext.logger.info('Opened database connection');
+		this.logger.info('Opened database connection');
 
 		// Version table
 		const [versionTableStmt] = this._connection.parse_sql_string(`
@@ -338,6 +327,11 @@ export class GdaDatabase implements Database {
 		}
 
 		// Update to current version
+		const [indexStmt] = this._connection.parse_sql_string(
+			'CREATE INDEX IF NOT EXISTS clipboard_datetime_idx ON clipboard (datetime DESC)',
+		);
+		await async_statement_execute_non_select(this._Gda, this._connection, indexStmt, this._cancellable);
+
 		if (version !== DATABASE_VERSION) {
 			// UPDATE 'version' SET version=DATABASE_VERSION
 			const builder2 = new this._Gda.SqlBuilder({ stmt_type: this._Gda.SqlStatementType.UPDATE });
@@ -346,7 +340,7 @@ export class GdaDatabase implements Database {
 			const setVersionStmt = builder2.get_statement();
 			await async_statement_execute_non_select(this._Gda, this._connection, setVersionStmt, this._cancellable);
 
-			this.ext.logger.log(`Migrated database version from ${version} to ${DATABASE_VERSION}.`);
+			this.logger.log(`Migrated database version from ${version} to ${DATABASE_VERSION}.`);
 		}
 	}
 
@@ -389,15 +383,15 @@ export class GdaDatabase implements Database {
 
 			return deleted;
 		} catch (e) {
-			this.ext.logger.error('Failed to clear clipboard', e);
+			if (!this._cancellable.is_cancelled()) this.logger.error('Failed to clear clipboard', e);
 		}
 
 		return [];
 	}
 
 	public close(): Promise<void> {
-		this._connection.close();
 		this._cancellable.cancel();
+		this._connection.close();
 		return Promise.resolve();
 	}
 
@@ -457,7 +451,7 @@ export class GdaDatabase implements Database {
 							metadataObj = json as Metadata;
 						}
 					} catch {
-						this.ext.logger.error('Failed to parse metadata');
+						if (!this._cancellable.is_cancelled()) this.logger.error('Failed to parse metadata');
 					}
 				}
 
@@ -466,7 +460,7 @@ export class GdaDatabase implements Database {
 
 			return entries;
 		} catch (e) {
-			this.ext.logger.error('Failed to get clipboard entries', e);
+			if (!this._cancellable.is_cancelled()) this.logger.error('Failed to get clipboard entries', e);
 		}
 
 		return [];
@@ -513,7 +507,7 @@ export class GdaDatabase implements Database {
 
 			return null;
 		} catch (e) {
-			this.ext.logger.error('Failed to select conflicting entry', e);
+			if (!this._cancellable.is_cancelled()) this.logger.error('Failed to select conflicting entry', e);
 		}
 
 		return null;
@@ -553,7 +547,7 @@ export class GdaDatabase implements Database {
 
 			return new ClipboardEntry(id, type, content, false, null, datetime, metadata);
 		} catch (e) {
-			this.ext.logger.error('Failed to insert entry', e);
+			if (!this._cancellable.is_cancelled()) this.logger.error('Failed to insert entry', e);
 		}
 
 		return null;
@@ -602,7 +596,8 @@ export class GdaDatabase implements Database {
 			const id = await this.selectConflict(entry);
 			return id ?? -1;
 		} catch (e) {
-			this.ext.logger.error(`Failed to update property "${property}" for entry ${entry.id}`, e);
+			if (!this._cancellable.is_cancelled())
+				this.logger.error(`Failed to update property "${property}" for entry ${entry.id}`, e);
 		}
 
 		return -1;
@@ -634,7 +629,7 @@ export class GdaDatabase implements Database {
 
 			return result > 0;
 		} catch (e) {
-			this.ext.logger.error(`Failed to delete entry ${entry.id}`, e);
+			if (!this._cancellable.is_cancelled()) this.logger.error(`Failed to delete entry ${entry.id}`, e);
 		}
 
 		return false;
@@ -682,6 +677,8 @@ export class GdaDatabase implements Database {
 				this._cancellable,
 			);
 
+			if (datamodel.get_n_rows() === 0) return [];
+
 			// DELETE FROM table WHERE id IN (select)
 			// add_subselect is not exposed as a javascript binding in Gda 5.0
 			const selectSql = this._connection.statement_to_sql(selectStmt, selectStmt.get_parameters()[1], 0)[0];
@@ -704,7 +701,7 @@ export class GdaDatabase implements Database {
 
 			return deleted;
 		} catch (e) {
-			this.ext.logger.error('Failed to delete oldest entries', e);
+			if (!this._cancellable.is_cancelled()) this.logger.error('Failed to delete oldest entries', e);
 		}
 
 		return [];

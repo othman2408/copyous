@@ -33,6 +33,8 @@ interface JsonDatabaseModel {
  */
 export class JsonDatabase extends MemoryDatabase {
 	private _saveTimeoutId: number = -1;
+	private _dirty = false;
+	private _write: Promise<void> | undefined;
 
 	constructor(
 		private ext: CopyousExtension,
@@ -77,7 +79,10 @@ export class JsonDatabase extends MemoryDatabase {
 
 	public override async close(): Promise<void> {
 		if (this._saveTimeoutId >= 0) GLib.source_remove(this._saveTimeoutId);
+		this._saveTimeoutId = -1;
 		await this.flush();
+		this._entries.clear();
+		this._keys.clear();
 	}
 
 	public override async insert(
@@ -112,38 +117,57 @@ export class JsonDatabase extends MemoryDatabase {
 	}
 
 	private save(): void {
-		if (this._saveTimeoutId >= 0) GLib.source_remove(this._saveTimeoutId);
+		this._dirty = true;
+		// Coalesce bursts without postponing persistence indefinitely during continuous copying.
+		if (this._saveTimeoutId >= 0) return;
 		this._saveTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
-			this.flush().catch(() => {});
+			const logger = this.ext.logger;
+			this.flush().catch((error: unknown) => logger.error('Failed to save clipboard history', error));
 			this._saveTimeoutId = -1;
 			return GLib.SOURCE_REMOVE;
 		});
 	}
 
-	private async flush(): Promise<void> {
-		try {
-			const database: JsonDatabaseModel = {
-				version: DATABASE_VERSION,
-				entries: Array.from(this._entries.values(), (entry): JsonClipboardEntry => ({
-					type: entry.type,
-					content: entry.content,
-					pinned: entry.pinned,
-					tag: entry.tag,
-					datetime: entry.datetime.to_utc()!.format_iso8601()!,
-					metadata: entry.metadata,
-					title: entry.title || undefined,
-				})),
-			};
-
-			const dir = this.file.get_parent();
-			if (dir && !dir.query_exists(null)) {
-				dir.make_directory_with_parents(null);
-			}
-
-			const bytes = new TextEncoder().encode(JSON.stringify(database));
-			await this.file.replace_contents_async(bytes, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
-		} catch (error) {
-			this.ext.logger.error('Failed to save JSON database', error);
+	public async flush(): Promise<void> {
+		if (this._write) {
+			await this._write;
+			return this.flush();
 		}
+		if (!this._dirty) return;
+		this._dirty = false;
+		this._write = this.writeSnapshot();
+		try {
+			await this._write;
+		} catch (error) {
+			this._dirty = true;
+			throw error;
+		} finally {
+			this._write = undefined;
+		}
+		// Include changes made while the asynchronous replacement was in flight.
+		if (this._dirty) await this.flush();
+	}
+
+	private async writeSnapshot(): Promise<void> {
+		const database: JsonDatabaseModel = {
+			version: DATABASE_VERSION,
+			entries: Array.from(this._entries.values(), (entry): JsonClipboardEntry => ({
+				type: entry.type,
+				content: entry.content,
+				pinned: entry.pinned,
+				tag: entry.tag,
+				datetime: entry.datetime.to_utc()!.format_iso8601()!,
+				metadata: entry.metadata,
+				title: entry.title || undefined,
+			})),
+		};
+
+		const dir = this.file.get_parent();
+		if (dir && !dir.query_exists(null)) {
+			dir.make_directory_with_parents(null);
+		}
+
+		const bytes = new TextEncoder().encode(JSON.stringify(database));
+		await this.file.replace_contents_async(bytes, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
 	}
 }

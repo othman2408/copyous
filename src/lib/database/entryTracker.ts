@@ -1,22 +1,34 @@
 import GLib from 'gi://GLib';
-import type Gda from 'gi://Gda';
 import Gio from 'gi://Gio';
 
 import type CopyousExtension from '../../extension.js';
 import { ItemType, getDefaultDatabaseFile } from '../common/constants.js';
 import { ClipboardHistory, DatabaseBackend } from '../common/settings.js';
 import { getLinkImagePath } from '../misc/link.js';
+import { forEachCooperatively } from '../misc/scheduler.js';
 import { ClipboardEntry, Database, Metadata } from './database.js';
-import { GdaDatabase } from './gda.js';
-import { JsonDatabase } from './json.js';
 import { MemoryDatabase } from './memory.js';
+import { RemoteDatabase } from './remote.js';
 
 export class ClipboardEntryTracker {
 	private _database: Database | undefined;
 	private _entries: Map<number, ClipboardEntry> = new Map();
 	private _fromDefault: boolean = false;
+	private _signals = new Map<ClipboardEntry, number[]>();
+	private _initialization: Promise<void> = Promise.resolve();
+	private _destroyed = false;
 
-	constructor(private ext: CopyousExtension) {}
+	private readonly settings;
+	private readonly logger;
+
+	constructor(private ext: CopyousExtension) {
+		this.settings = ext.settings;
+		this.logger = ext.logger;
+	}
+
+	public has(entry: ClipboardEntry): boolean {
+		return this._entries.get(entry.id) === entry;
+	}
 
 	get shouldInit(): boolean {
 		if (this._fromDefault) {
@@ -27,13 +39,26 @@ export class ClipboardEntryTracker {
 		return true;
 	}
 
-	async init(): Promise<ClipboardEntry[]> {
+	init(): Promise<ClipboardEntry[]> {
+		const initialization = this._initialization
+			.catch(() => {})
+			.then(() => {
+				return this._destroyed ? [] : this.initialize();
+			});
+		// Do not keep the resolved array alive after deleted entries leave the tracker.
+		this._initialization = initialization.then(
+			() => {},
+			() => {},
+		);
+		return initialization;
+	}
+
+	private async initialize(): Promise<ClipboardEntry[]> {
 		if (this._database) {
-			await this.clear();
-			await this.destroy();
+			await this.closeDatabase();
 		}
 
-		const backend: DatabaseBackend = this.ext.settings.get_enum('database-backend');
+		const backend: DatabaseBackend = this.settings.get_enum('database-backend');
 		const file = this.getFile();
 		const dir = file.get_parent()!;
 		const fileName = file.get_basename()!.replace(/(\.db|\.json)$/, '');
@@ -50,31 +75,31 @@ export class ClipboardEntryTracker {
 		let entries: ClipboardEntry[] | null = null;
 		if (backend === DatabaseBackend.Default) {
 			this._fromDefault = true;
-			if (this.ext.settings.get_boolean('in-memory-database')) {
-				this.ext.logger.log('Set default database backend to in-memory');
+			if (this.settings.get_boolean('in-memory-database')) {
+				this.logger.log('Set default database backend to in-memory');
 				entries = await this.initMemory();
 			} else if (dbFile.query_exists(null)) {
 				entries = await this.initSqlite(dbFile, true);
-				this.ext.settings.set_enum('database-backend', DatabaseBackend.Sqlite);
-				this.ext.logger.log('Set default database backend to SQLite');
+				this.settings.set_enum('database-backend', DatabaseBackend.Sqlite);
+				this.logger.log('Set default database backend to SQLite');
 			} else if (jsonFile.query_exists(null)) {
 				entries = await this.initJson(jsonFile);
-				this.ext.settings.set_enum('database-backend', DatabaseBackend.Json);
-				this.ext.logger.log('Set default database backend to JSON');
+				this.settings.set_enum('database-backend', DatabaseBackend.Json);
+				this.logger.log('Set default database backend to JSON');
 			} else {
 				entries = await this.initSqlite(dbFile, false);
 				if (entries !== null) {
-					this.ext.settings.set_enum('database-backend', DatabaseBackend.Sqlite);
-					this.ext.logger.log('Set default database backend to SQLite');
+					this.settings.set_enum('database-backend', DatabaseBackend.Sqlite);
+					this.logger.log('Set default database backend to SQLite');
 				} else {
 					entries = await this.initJson(jsonFile);
 					if (entries !== null) {
-						this.ext.settings.set_enum('database-backend', DatabaseBackend.Json);
-						this.ext.logger.log('Set default database backend to JSON');
+						this.settings.set_enum('database-backend', DatabaseBackend.Json);
+						this.logger.log('Set default database backend to JSON');
 					} else {
 						entries = await this.initMemory();
-						this.ext.settings.set_enum('database-backend', DatabaseBackend.Memory);
-						this.ext.logger.log('Set default database backend to in-memory');
+						this.settings.set_enum('database-backend', DatabaseBackend.Memory);
+						this.logger.log('Set default database backend to in-memory');
 					}
 				}
 			}
@@ -88,12 +113,12 @@ export class ClipboardEntryTracker {
 		entries ??= await this.initMemory();
 
 		// Track all entries
-		this.track(...entries);
+		await this.track(entries);
 
 		// Delete oldest entries
 		await this.deleteOldest();
 
-		return entries;
+		return Array.from(this._entries.values());
 	}
 
 	private getFile(): Gio.File {
@@ -101,52 +126,29 @@ export class ClipboardEntryTracker {
 		const environment = GLib.get_environ();
 		const debugPath = GLib.environ_getenv(environment, 'DEBUG_COPYOUS_DBPATH');
 		if (debugPath) {
-			this.ext.logger.log('Using debug database');
+			this.logger.log('Using debug database');
 			return Gio.File.new_for_path(debugPath);
 		}
 
 		// Get database location or use default ${XDG_DATA_HOME}/${EXTENSION UUID}
-		const location = this.ext.settings.get_string('database-location');
+		const location = this.settings.get_string('database-location');
 		return location ? Gio.File.new_for_path(location) : getDefaultDatabaseFile(this.ext, DatabaseBackend.Default);
 	}
 
 	private async initSqlite(file: Gio.File | null, showError: boolean): Promise<ClipboardEntry[] | null> {
+		if (!file) return this.initMemory();
+		const database = new RemoteDatabase(this.ext, 'sqlite', file);
 		try {
-			// Check if DEBUG_COPYOUS_GDA_VERSION is set
-			const environment = GLib.get_environ();
-			const gdaVersion = GLib.environ_getenv(environment, 'DEBUG_COPYOUS_GDA_VERSION');
-			if (gdaVersion) {
-				imports.package.require({ Gda: gdaVersion });
-			}
-		} catch (err) {
-			this.ext.logger.warn(err);
-		}
-
-		let gda: typeof Gda;
-		try {
-			gda = (await import('gi://Gda')).default;
+			await database.init();
+			this._database = database;
+			return await database.entries();
 		} catch {
-			this.ext.logger.error(`Failed to load Gda`);
-
-			if (showError && !this.ext.settings.get_boolean('disable-gda-warning')) {
-				this.ext.notificationManager?.warning(
-					_('Failed to load Gda'),
-					_('Clipboard history will be disabled'),
-					[_('Disable Warning'), () => this.ext.settings.set_boolean('disable-gda-warning', true)],
-				);
+			await database.close().catch(() => {});
+			this._database = undefined;
+			this.logger.error('Failed to load Gda in clipboard worker');
+			if (showError && !this.settings.get_boolean('disable-gda-warning')) {
+				this.ext.notificationManager?.warning(_('Failed to load Gda'), _('Clipboard history will be disabled'));
 			}
-			return null;
-		}
-
-		try {
-			this.ext.logger.log(`Using ${file === null ? 'in-memory ' : ''}Gda ${gda.__version__} database`);
-			this._database = new GdaDatabase(this.ext, gda, file);
-			await this._database.init();
-			return await this._database.entries();
-		} catch (e) {
-			this.ext.logger.error('Failed to load Gda');
-			this.ext.notificationManager?.warning(_('Failed to load Gda'), _('Clipboard history will be disabled'));
-
 			return null;
 		}
 	}
@@ -155,12 +157,14 @@ export class ClipboardEntryTracker {
 		if (file === null) return await this.initMemory();
 
 		try {
-			this.ext.logger.log('Using JSON database');
-			this._database = new JsonDatabase(this.ext, file);
+			this.logger.log('Using JSON database');
+			this._database = new RemoteDatabase(this.ext, 'json', file);
 			await this._database.init();
 			return await this._database.entries();
 		} catch (e) {
-			this.ext.logger.error('Failed to initialize JSON database', e);
+			await this._database?.close().catch(() => {});
+			this._database = undefined;
+			this.logger.error('Failed to initialize JSON database', e);
 			this.ext.notificationManager?.warning(_('Failed to load JSON'), _('Clipboard history will be disabled'));
 
 			return null;
@@ -168,7 +172,7 @@ export class ClipboardEntryTracker {
 	}
 
 	private async initMemory(): Promise<ClipboardEntry[]> {
-		this.ext.logger.log('Using in-memory database');
+		this.logger.log('Using in-memory database');
 
 		this._database = new MemoryDatabase();
 		await this._database.init();
@@ -178,14 +182,23 @@ export class ClipboardEntryTracker {
 	public async clear(history: ClipboardHistory | null = null) {
 		if (!this._database) return;
 
-		history ??= this.ext.settings.get_enum('clipboard-history');
+		history ??= this.settings.get_enum('clipboard-history');
 		const deleted = await this._database.clear(history);
-		deleted.forEach((id) => this.deleteFromDatabase(id));
+		await forEachCooperatively(deleted, (id) => this.deleteFromDatabase(id));
 	}
 
 	public async destroy() {
-		await this._database?.close();
+		this._destroyed = true;
+		await this._initialization.catch(() => []);
+		await this.closeDatabase();
+	}
+
+	private async closeDatabase() {
+		const database = this._database;
 		this._database = undefined;
+		await forEachCooperatively(this._signals.keys(), (entry) => this.untrack(entry));
+		this._entries.clear();
+		await database?.close();
 	}
 
 	/**
@@ -200,8 +213,12 @@ export class ClipboardEntryTracker {
 		content: string,
 		metadata: Metadata | null = null,
 	): Promise<ClipboardEntry | null> {
-		const id = await this._database?.selectConflict({ type, content });
-		if (id) {
+		await this._initialization;
+		if (this._destroyed) return null;
+		const database = this._database;
+		const id = await database?.selectConflict({ type, content });
+		if (this._destroyed || database !== this._database) return null;
+		if (id != null) {
 			// Check if the entry is already tracked
 			const trackedEntry = this._entries.get(id);
 			if (trackedEntry) {
@@ -210,20 +227,20 @@ export class ClipboardEntryTracker {
 			}
 		}
 
-		const entry = await this._database?.insert(type, content, metadata);
-		if (!entry) return null;
+		const entry = await database?.insert(type, content, metadata);
+		if (!entry || this._destroyed || database !== this._database) return null;
 
 		// Start tracking it
-		this.track(entry);
+		await this.track([entry]);
 
 		// Also delete oldest entries
 		await this.deleteOldest();
 
-		return entry;
+		return this.has(entry) ? entry : null;
 	}
 
 	public checkOldest(): boolean {
-		const M = this.ext.settings.get_int('history-time');
+		const M = this.settings.get_int('history-time');
 		if (M === 0) return false;
 
 		const now = GLib.DateTime.new_now_utc();
@@ -238,35 +255,72 @@ export class ClipboardEntryTracker {
 	}
 
 	public async deleteOldest() {
-		const N = this.ext.settings.get_int('history-length');
-		const M = this.ext.settings.get_int('history-time');
+		const N = this.settings.get_int('history-length');
+		const M = this.settings.get_int('history-time');
 		const deleted = await this._database?.deleteOldest(N, M);
-		if (deleted) deleted.forEach((id) => this.deleteFromDatabase(id));
+		if (deleted) await forEachCooperatively(deleted, (id) => this.deleteFromDatabase(id));
 	}
 
-	private track(...entries: ClipboardEntry[]) {
-		for (const entry of entries) {
-			entry.connect('notify::content', async () => {
-				const id = await this._database?.updateProperty(entry, 'content');
-				// If entry conflicts with another entry, delete it
-				if (id !== undefined && id >= 0) {
-					entry.emit('delete');
+	private async track(entries: Iterable<ClipboardEntry>) {
+		await forEachCooperatively(entries, (entry) => {
+			if (this._destroyed) return;
+			const signals = [
+				entry.connect('notify::content', async () => {
+					const id = await this._database
+						?.updateProperty(entry, 'content')
+						.catch((error: unknown) => this.logger.error(error));
+					// If entry conflicts with another entry, delete it
+					if (id !== undefined && id >= 0) {
+						entry.emit('delete');
 
-					// Update the date of the other entry
-					const conflicted = this._entries.get(id);
-					if (conflicted) {
-						conflicted.datetime = entry.datetime;
+						// Update the date of the other entry
+						const conflicted = this._entries.get(id);
+						if (conflicted) {
+							conflicted.datetime = entry.datetime;
+						}
 					}
-				}
-			});
-			entry.connect('notify::pinned', () => this._database?.updateProperty(entry, 'pinned'));
-			entry.connect('notify::tag', () => this._database?.updateProperty(entry, 'tag'));
-			entry.connect('notify::datetime', () => this._database?.updateProperty(entry, 'datetime'));
-			entry.connect('notify::metadata', () => this._database?.updateProperty(entry, 'metadata'));
-			entry.connect('notify::title', () => this._database?.updateProperty(entry, 'title'));
-			entry.connect('delete', () => this.delete(entry));
+				}),
+			];
+			signals.push(
+				entry.connect('notify::pinned', () =>
+					this._database?.updateProperty(entry, 'pinned').catch((error: unknown) => this.logger.error(error)),
+				),
+			);
+			signals.push(
+				entry.connect('notify::tag', () =>
+					this._database?.updateProperty(entry, 'tag').catch((error: unknown) => this.logger.error(error)),
+				),
+			);
+			signals.push(
+				entry.connect('notify::datetime', () =>
+					this._database
+						?.updateProperty(entry, 'datetime')
+						.catch((error: unknown) => this.logger.error(error)),
+				),
+			);
+			signals.push(
+				entry.connect('notify::metadata', () =>
+					this._database
+						?.updateProperty(entry, 'metadata')
+						.catch((error: unknown) => this.logger.error(error)),
+				),
+			);
+			signals.push(
+				entry.connect('notify::title', () =>
+					this._database?.updateProperty(entry, 'title').catch((error: unknown) => this.logger.error(error)),
+				),
+			);
+			signals.push(
+				entry.connect('delete', () => this.delete(entry).catch((error: unknown) => this.logger.error(error))),
+			);
+			this._signals.set(entry, signals);
 			this._entries?.set(entry.id, entry);
-		}
+		});
+	}
+
+	private untrack(entry: ClipboardEntry) {
+		for (const id of this._signals.get(entry) ?? []) entry.disconnect(id);
+		this._signals.delete(entry);
 	}
 
 	private async delete(entry: ClipboardEntry) {
@@ -278,7 +332,7 @@ export class ClipboardEntryTracker {
 					file.delete(null);
 				}
 			} catch {
-				this.ext.logger.error('Failed to delete image', entry.content);
+				this.logger.error('Failed to delete image', entry.content);
 			}
 		} else if (entry.type === ItemType.Link && entry.metadata) {
 			// Delete thumbnail image
@@ -290,7 +344,7 @@ export class ClipboardEntryTracker {
 						file.delete(null);
 					}
 				} catch {
-					this.ext.logger.error('Failed to delete thumbnail image', metadata.image);
+					this.logger.error('Failed to delete thumbnail image', metadata.image);
 				}
 			}
 		}
@@ -299,6 +353,7 @@ export class ClipboardEntryTracker {
 		if (this._entries.has(entry.id)) {
 			await this._database?.delete(entry);
 			this._entries.delete(entry.id);
+			this.untrack(entry);
 		}
 	}
 
@@ -307,6 +362,7 @@ export class ClipboardEntryTracker {
 		if (entry) {
 			this._entries.delete(id);
 			entry.emit('delete');
+			this.untrack(entry);
 		}
 	}
 }
