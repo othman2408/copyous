@@ -39,7 +39,7 @@ endif
 .PHONY: pot po check-pot check-po
 .PHONY: build install uninstall
 .PHONY: launch launch-profile launch-settings
-.PHONY: test test-unit
+.PHONY: test test-unit test-preferences
 
 all: $(DIST_ZIP)
 
@@ -63,11 +63,11 @@ typecheck:
 
 lint: typecheck
 	pnpm exec oxlint src --report-unused-disable-directives
-	pnpm exec oxfmt src resources/css scripts tests/lint tests/tooling .oxlintrc.json .oxfmtrc.json --check
+	pnpm exec oxfmt src resources/css scripts tests/lint tests/tooling tests/preferences .oxlintrc.json .oxfmtrc.json --check
 
 lint-fix:
 	pnpm exec oxlint src --fix --report-unused-disable-directives
-	pnpm exec oxfmt src resources/css scripts tests/lint tests/tooling .oxlintrc.json .oxfmtrc.json --write
+	pnpm exec oxfmt src resources/css scripts tests/lint tests/tooling tests/preferences .oxlintrc.json .oxfmtrc.json --write
 
 shexli: $(DIST_ZIP)
 	uv run python -m shexli $< --format json | node ./scripts/shexli/transform-output.ts
@@ -246,6 +246,12 @@ test-lint:
 test-tooling:
 	node --test tests/tooling/*.test.mjs
 
+test-preferences: $(TSC) $(DIST_DIR)/resources.gresource
+	COPYOUS_PROJECT_ROOT="$(CURDIR)" \
+	GI_TYPELIB_PATH="/usr/lib/gnome-shell/girepository-1.0:$${GI_TYPELIB_PATH}" \
+	LD_LIBRARY_PATH="/usr/lib/gnome-shell:$${LD_LIBRARY_PATH}" \
+	dbus-run-session -- gnome-shell-test-tool --headless --extra-filter dev.copyous.ActionsTest tests/preferences/shell.js
+
 test-unit: $(TSC)
 	node --test tests/unit/*.test.mjs
 	gjs -m tests/runtime/performance.js
@@ -255,3 +261,4 @@ test-unit: $(TSC)
 test: $(DIST_DIR)/tests.tsbuildinfo $(DIST_ZIP) database test-unit test-lint test-tooling
 	cp $(SHELL_TEST_JS) $(DIST_DIR)/tests/shell/
 	bash ./tests/run-tests.sh
+	$(MAKE) test-preferences

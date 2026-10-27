@@ -44,7 +44,7 @@ export class ActionsPage extends Adw.PreferencesPage {
 	private _config: ActionConfig;
 	private readonly _actionsGroup: ActionsGroup;
 	private readonly _defaultsPage: ActionDefaultsPage;
-	private readonly _restoreButton: Adw.PreferencesRow;
+	private readonly _restoreButton: Adw.ActionRow;
 	private readonly _restoreBadge: Gtk.Label;
 
 	constructor(
@@ -63,38 +63,45 @@ export class ActionsPage extends Adw.PreferencesPage {
 		this._actionsGroup = new ActionsGroup(window, this._config.actions);
 		this.add(this._actionsGroup);
 
-		const defaultsGroup = new Adw.PreferencesGroup();
+		const defaultsGroup = new Adw.PreferencesGroup({ title: _('Quick Activation') });
 		this.add(defaultsGroup);
 		const defaultsButton = new Adw.ActionRow({
 			title: _('Default Actions'),
-			subtitle: _('Set default actions that trigger when holding control'),
+			subtitle: _('Choose what happens when you hold Ctrl while activating an item'),
 			activatable: true,
 		});
 		defaultsGroup.add(defaultsButton);
+		defaultsButton.add_prefix(new Gtk.Image({ icon_name: Icon.Keyboard }));
 		defaultsButton.add_suffix(new Gtk.Image({ icon_name: Icon.Next }));
 
-		const resetGroup = new Adw.PreferencesGroup();
+		const resetGroup = new Adw.PreferencesGroup({ title: _('Manage Actions') });
 		this.add(resetGroup);
 
-		this._restoreButton = new Adw.PreferencesRow({ css_classes: ['button'], activatable: true, sensitive: false });
-		resetGroup.add(this._restoreButton);
-		this._restoreButton.parent!.connect('row-activated', async (_listBox, row: Gtk.ListBoxRow) => {
-			if (row === this._restoreButton) await this.restore();
+		this._restoreButton = new Adw.ActionRow({
+			title: _('Restore Built-In Actions'),
+			subtitle: _('Add back missing built-ins. Keep your custom actions.'),
+			activatable: true,
+			sensitive: false,
 		});
+		this._restoreButton.add_prefix(new Gtk.Image({ icon_name: Icon.Undo }));
+		this._restoreButton.connect('activated', this.restore.bind(this));
+		resetGroup.add(this._restoreButton);
 
-		const restoreBox = new Gtk.CenterBox({ css_classes: ['contents'] });
-		this._restoreButton.child = restoreBox;
-		restoreBox.center_widget = new Gtk.Label({ css_classes: ['title'], label: _('Restore Built-In Actions') });
 		this._restoreBadge = new Gtk.Label({
 			css_classes: ['actions-badge'],
 			valign: Gtk.Align.CENTER,
 			visible: false,
 		});
-		restoreBox.end_widget = this._restoreBadge;
+		this._restoreButton.add_suffix(this._restoreBadge);
 		this.updateRestoreButton();
 
-		const resetButton = new Adw.ButtonRow({ title: _('Reset Actions') });
-		resetButton.add_css_class('destructive-action');
+		const resetButton = new Adw.ActionRow({
+			title: _('Reset All Actions'),
+			subtitle: _('Replace all actions with the built-ins. Removes custom actions.'),
+			activatable: true,
+		});
+		resetButton.add_css_class('reset-actions-row');
+		resetButton.add_prefix(new Gtk.Image({ icon_name: Icon.Delete }));
 		resetButton.connect('activated', this.reset.bind(this));
 		resetGroup.add(resetButton);
 

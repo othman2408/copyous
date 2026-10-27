@@ -4,9 +4,8 @@ import GObject from 'gi://GObject';
 import Gdk from 'gi://Gdk';
 import Gio from 'gi://Gio';
 import Gtk from 'gi://Gtk';
-import Pango from 'gi://Pango';
 
-import { gettext as _ } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
+import { gettext as _, ngettext } from 'resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js';
 
 import {
 	type Action,
@@ -15,10 +14,11 @@ import {
 	instanceofActionSubmenu,
 	instanceofCommandAction,
 } from '../../common/actions.js';
+import { ItemType } from '../../common/constants.js';
 import { JsObjectWrapper, registerClass } from '../../common/gjs.js';
 import { Icon } from '../../common/icons.js';
 import { NestedListBox } from '../utils.js';
-import { AddActionDialog, EditActionDialog, TypesBox } from './actionDialog.js';
+import { AddActionDialog, EditActionDialog } from './actionDialog.js';
 import { AddActionSubmenuDialog, EditActionSubmenuDialog } from './actionSubMenuDialog.js';
 
 Gio._promisify(Adw.AlertDialog.prototype, 'choose');
@@ -49,6 +49,8 @@ class ActionSubmenuRowBase extends Adw.ExpanderRow {
 	constructor(public readonly actionSubmenu: ActionSubmenu) {
 		super({
 			title: actionSubmenu.name,
+			use_markup: false,
+			title_lines: 1,
 		});
 
 		const dragHandle = new Gtk.Image({
@@ -56,13 +58,23 @@ class ActionSubmenuRowBase extends Adw.ExpanderRow {
 			valign: Gtk.Align.CENTER,
 		});
 		this.add_prefix(dragHandle);
+		dragHandle.tooltip_text = _('Drag to reorder');
+		this.add_prefix(new Gtk.Image({ icon_name: Icon.Folder, css_classes: ['dim-label'] }));
+		this.connect('notify::action-submenu', () => this.updateSummary());
+		this.updateSummary();
 
 		this._menuButton = new Gtk.MenuButton({
 			icon_name: Icon.ViewMore,
 			valign: Gtk.Align.CENTER,
 			css_classes: ['flat'],
 		});
+		this._menuButton.tooltip_text = _('Group options');
 		this.add_suffix(this._menuButton);
+	}
+
+	private updateSummary() {
+		const count = this.actionSubmenu.actions.length;
+		this.subtitle = _('Group') + ' · ' + ngettext('%d action', '%d actions', count).replace('%d', String(count));
 	}
 }
 
@@ -83,6 +95,7 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 		super(actionSubmenu);
 
 		this._actionsList = new NestedListBox();
+		this._actionsList.add_css_class('action-group-children');
 		this.add_row(this._actionsList);
 		this._actionsList.listbox.add_css_class('has-placeholder');
 		this._actionsList.listbox.set_placeholder(
@@ -93,6 +106,7 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 		);
 
 		this._addActionButtonList = new NestedListBox();
+		this._addActionButtonList.add_css_class('action-group-children');
 		this.add_row(this._addActionButtonList);
 
 		this._addActionButton = new Adw.ButtonRow({
@@ -291,91 +305,72 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 		action: GObject.ParamSpec.jsobject('action', null, null, GObject.ParamFlags.READABLE),
 	},
 })
-class ActionRowBase extends Adw.PreferencesRow {
+class ActionRowBase extends Adw.ActionRow {
 	protected readonly _menuButton: Gtk.MenuButton;
-	protected readonly _nameLabel: Gtk.Label;
-	protected readonly _patternLabel: Gtk.Label;
-	protected readonly _actionLabel: Gtk.Label;
+	protected readonly _editButton: Gtk.Button;
 	protected readonly _shortcutLabel: Adw.ShortcutLabel;
-	protected readonly _typesBox: TypesBox;
 
 	constructor(public readonly action: Action) {
-		super();
-
-		const header = new Gtk.Box({
-			valign: Gtk.Align.CENTER,
-			hexpand: false,
-			css_classes: ['header'],
+		super({
+			use_markup: false,
+			title_lines: 1,
+			subtitle_lines: 2,
 		});
-		this.child = header;
 
-		const prefixes = new Gtk.Box({ css_classes: ['prefixes'] });
-		header.append(prefixes);
-
-		const dragHandle = new Gtk.Image({
-			icon_name: Icon.DragHandle,
-			valign: Gtk.Align.CENTER,
-		});
-		prefixes.append(dragHandle);
-
-		const box = new Gtk.Box({
-			orientation: Gtk.Orientation.VERTICAL,
-			valign: Gtk.Align.CENTER,
-			hexpand: true,
-			css_classes: ['title'],
-		});
-		header.append(box);
-
-		const titleBox = new Gtk.Box();
-		box.append(titleBox);
-
-		this._nameLabel = new Gtk.Label({
-			label: action.name,
-			xalign: 0,
-			ellipsize: Pango.EllipsizeMode.END,
-			css_classes: ['title'],
-		});
-		titleBox.append(this._nameLabel);
-
-		this._patternLabel = new Gtk.Label({
-			label: action.pattern ?? '',
-			xalign: 0,
-			yalign: 1,
-			margin_start: 12,
-			ellipsize: Pango.EllipsizeMode.END,
-			css_classes: ['subtitle'],
-		});
-		titleBox.append(this._patternLabel);
-
-		this._actionLabel = new Gtk.Label({
-			label: instanceofCommandAction(action) ? action.command : '',
-			xalign: 0,
-			ellipsize: Pango.EllipsizeMode.END,
-			css_classes: ['subtitle'],
-			visible: instanceofCommandAction(action),
-		});
-		box.append(this._actionLabel);
+		this.add_prefix(
+			new Gtk.Image({
+				icon_name: Icon.DragHandle,
+				valign: Gtk.Align.CENTER,
+				tooltip_text: _('Drag to reorder'),
+			}),
+		);
 
 		this._shortcutLabel = new ShortcutLabel({
-			accelerator: action.shortcut?.[0] ?? '',
 			valign: Gtk.Align.CENTER,
-			margin_end: 6,
+			tooltip_text: _('Keyboard shortcut'),
 		});
-		header.append(this._shortcutLabel);
+		this.add_suffix(this._shortcutLabel);
 
-		this._typesBox = new TypesBox();
-		this._typesBox.types = action.types ?? [];
-		header.append(this._typesBox);
-
-		const suffixes = new Gtk.Box();
-		header.append(suffixes);
-
-		this._menuButton = new Gtk.MenuButton({
-			icon_name: Icon.ViewMore,
+		this._editButton = new Gtk.Button({
+			icon_name: Icon.Edit,
+			tooltip_text: _('Edit Action'),
 			valign: Gtk.Align.CENTER,
 			css_classes: ['flat'],
 		});
-		suffixes.append(this._menuButton);
+		this.add_suffix(this._editButton);
+		this.activatable_widget = this._editButton;
+
+		this._menuButton = new Gtk.MenuButton({
+			icon_name: Icon.ViewMore,
+			tooltip_text: _('Action options'),
+			valign: Gtk.Align.CENTER,
+			css_classes: ['flat'],
+		});
+		this.add_suffix(this._menuButton);
+		this.updateSummary();
+	}
+
+	protected updateSummary() {
+		const labels: Record<ItemType, string> = {
+			[ItemType.Text]: _('Text'),
+			[ItemType.Code]: _('Code'),
+			[ItemType.Image]: _('Images'),
+			[ItemType.File]: _('Files'),
+			[ItemType.Files]: _('File Lists'),
+			[ItemType.Link]: _('Links'),
+			[ItemType.Character]: _('Characters'),
+			[ItemType.Color]: _('Colors'),
+		};
+		const types = [...new Set(this.action.types ?? [])];
+		const scope =
+			types.length === 0 || types.length === Object.keys(labels).length
+				? _('All content types')
+				: types.map((type) => labels[type]).join(', ');
+		this.title = this.action.name;
+		this.subtitle = scope;
+		this.tooltip_text = instanceofCommandAction(this.action) ? this.action.command : scope;
+		this._shortcutLabel.accelerator = this.action.shortcut?.[0] ?? '';
+		this._shortcutLabel.visible = this._shortcutLabel.accelerator !== '';
 	}
 }
 
@@ -390,6 +385,7 @@ class ActionRow extends ActionRowBase {
 		action: Action,
 	) {
 		super(action);
+		this._editButton.connect('clicked', this.edit.bind(this));
 
 		const actionGroup = new Gio.SimpleActionGroup();
 
@@ -417,11 +413,7 @@ class ActionRow extends ActionRowBase {
 		const response = await editActionDialog.choose(this.window, null);
 		if (response !== 'save') return;
 
-		this._nameLabel.label = this.action.name;
-		this._patternLabel.label = this.action.pattern ?? '';
-		this._actionLabel.label = instanceofCommandAction(this.action) ? this.action.command : '';
-		this._shortcutLabel.accelerator = this.action.shortcut?.[0] ?? '';
-		this._typesBox.types = this.action.types ?? [];
+		this.updateSummary();
 		this.notify('action');
 	}
 
@@ -496,7 +488,12 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 		private window: Adw.PreferencesWindow,
 		actions: (Action | ActionSubmenu)[],
 	) {
-		super({ title: _('Actions') });
+		super({
+			title: _('Clipboard Actions'),
+			description: _(
+				'Choose what you can do with copied content. Expand a group to see its actions. Drag to reorder.',
+			),
+		});
 
 		this._actions = actions.filter((a) => instanceofAction(a) || instanceofActionSubmenu(a));
 
@@ -512,7 +509,7 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 		);
 		this.add(this._listbox);
 
-		const jsobjects = actions.map((a) => new JsObjectWrapper(a));
+		const jsobjects = this._actions.map((a) => new JsObjectWrapper(a));
 		this._model = Gio.ListStore.new(JsObjectWrapper.$gtype) as Gio.ListStore<
 			JsObjectWrapper<Action | ActionSubmenu>
 		>;
@@ -522,7 +519,8 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 
 		const addActionButton = new Gtk.MenuButton({
 			valign: Gtk.Align.CENTER,
-			css_classes: ['flat'],
+			css_classes: ['suggested-action'],
+			tooltip_text: _('Add an action or group'),
 			child: new Adw.ButtonContent({
 				icon_name: Icon.Add,
 				label: _('Add'),
@@ -544,7 +542,7 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 
 		const menu = new Gio.Menu();
 		menu.append(_('Add Action'), 'action-menu.add-action');
-		menu.append(_('Add Submenu'), 'action-menu.add-sub-menu');
+		menu.append(_('Add Group'), 'action-menu.add-sub-menu');
 		addActionButton.menu_model = menu;
 
 		this.configureDragAndDrop();
@@ -556,7 +554,7 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 
 	set actions(actions: (Action | ActionSubmenu)[]) {
 		this._actions = actions;
-		const jsobjects = actions.map((a) => new JsObjectWrapper(a));
+		const jsobjects = this._actions.map((a) => new JsObjectWrapper(a));
 		this._model.splice(0, this._model.n_items, jsobjects);
 		this.notify('actions');
 	}
