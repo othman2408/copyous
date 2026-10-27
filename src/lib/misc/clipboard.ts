@@ -10,9 +10,11 @@ import { Color } from '../common/color.js';
 import { ItemType, getImagesPath } from '../common/constants.js';
 import type { SignalMethods } from '../common/gjs.js';
 import { registerClass } from '../common/gjs.js';
+import { previewText } from '../common/preview.js';
 import { ClipboardEntry, FileOperation, Metadata } from '../database/database.js';
 import { ClipboardEntryTracker } from '../database/entryTracker.js';
 import { Keyboard } from './keyboard.js';
+import { readBounded } from './stream.js';
 
 Gio._promisify(Gio.File.prototype, 'load_contents_async');
 Gio._promisify(Gio.File.prototype, 'replace_contents_async');
@@ -42,12 +44,12 @@ type ClipboardContent =
 function contentChecksum(content: ClipboardContent): string | null {
 	switch (content.type) {
 		case ContentType.Text:
-			return GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, content.text, content.text.length);
+			return GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, content.text, -1);
 		case ContentType.Image:
 			return content.checksum;
 		case ContentType.File: {
 			const s = content.paths.map((f) => decodeURI(f).substring('file://'.length)).join('\n');
-			return GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, s, s.length);
+			return GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, s, -1);
 		}
 	}
 }
@@ -85,6 +87,8 @@ export class ClipboardManager extends GObject.Object {
 	private pasteSignalId: number = -1;
 
 	private prevClipboard: [ContentType, string] | null = null;
+	private readCancellable: Gio.Cancellable | undefined;
+	private destroyed = false;
 
 	constructor(
 		private ext: CopyousExtension,
@@ -99,6 +103,9 @@ export class ClipboardManager extends GObject.Object {
 	}
 
 	public destroy() {
+		this.destroyed = true;
+		this.readCancellable?.cancel();
+		this.readCancellable = undefined;
 		this.textDecoder = undefined;
 		this.textEncoder = undefined;
 		this.graphemeSegmenter = undefined;
@@ -250,13 +257,21 @@ export class ClipboardManager extends GObject.Object {
 		selectionType: Meta.SelectionType,
 		selectionSource: Meta.SelectionSource | null,
 	) {
+		if (selectionType !== Meta.SelectionType.SELECTION_CLIPBOARD || this.destroyed) return;
+		this.readCancellable?.cancel();
+		if (selectionSource === null) return;
+		const cancellable = new Gio.Cancellable();
+		this.readCancellable = cancellable;
+		const timeout = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 10, () => {
+			cancellable.cancel();
+			return GLib.SOURCE_CONTINUE;
+		});
 		try {
-			if (selectionSource === null) return;
-			if (selectionType !== Meta.SelectionType.SELECTION_CLIPBOARD) return;
-
 			const mimeTypes = selectionSource.get_mimetypes();
-			const content = await this.getContent(selectionSource, mimeTypes);
-			if (!content) return;
+			// Capture the exclusion decision while the copying application still has focus.
+			const save = this.shouldSave(mimeTypes);
+			const content = await this.getContent(selectionSource, mimeTypes, cancellable);
+			if (!content || cancellable.is_cancelled()) return;
 
 			const checksum = contentChecksum(content);
 			if (!checksum) return;
@@ -280,35 +295,32 @@ export class ClipboardManager extends GObject.Object {
 			// Check if history should be saved after setting the previous clipboard item.
 			// This ensures that content copied in incognito mode is not saved to history
 			// after copying an item after exiting incognito mode.
-			if (!this.shouldSave(mimeTypes)) return;
+			if (!save || !this.shouldSave(mimeTypes)) return;
 
-			const res = await this.convertContent(content);
-			if (!res) return;
+			const res = await this.convertContent(content, cancellable);
+			if (!res || cancellable.is_cancelled()) return;
 
 			const [type, text, metadata] = res;
 			const entry = await this.tracker.insert(type, text, metadata);
-			if (entry) {
+			if (entry && !this.destroyed) {
 				this.emit('clipboard', entry);
 			}
 		} catch (e) {
-			this.ext.logger.error(e);
+			if (!cancellable.is_cancelled() && !this.destroyed) this.ext.logger.error(e);
+		} finally {
+			GLib.source_remove(timeout);
+			if (this.readCancellable === cancellable) this.readCancellable = undefined;
 		}
 	}
 
 	private async getContent(
 		selectionSource: Meta.SelectionSource,
 		mimeTypes: readonly string[],
+		cancellable: Gio.Cancellable,
 	): Promise<ClipboardContent | null> {
 		async function getBytes(mimeType: string): Promise<Uint8Array<ArrayBufferLike>> {
-			const source = await selectionSource.read_async(mimeType, null);
-			const out = Gio.MemoryOutputStream.new_resizable();
-			await out.splice_async(
-				source,
-				Gio.OutputStreamSpliceFlags.CLOSE_SOURCE | Gio.OutputStreamSpliceFlags.CLOSE_TARGET,
-				GLib.PRIORITY_DEFAULT,
-				null,
-			);
-			return out.steal_as_bytes().toArray();
+			const source = await selectionSource.read_async(mimeType, cancellable);
+			return readBounded(source, 32 * 1024 * 1024, cancellable);
 		}
 
 		// Image
@@ -360,7 +372,10 @@ export class ClipboardManager extends GObject.Object {
 		return null;
 	}
 
-	private async convertContent(content: ClipboardContent): Promise<[ItemType, string, Metadata | null] | null> {
+	private async convertContent(
+		content: ClipboardContent,
+		cancellable: Gio.Cancellable,
+	): Promise<[ItemType, string, Metadata | null] | null> {
 		if (content.type === ContentType.Text) {
 			const trimmed = content.text.trim();
 
@@ -385,12 +400,11 @@ export class ClipboardManager extends GObject.Object {
 			}
 
 			// Code
-			const slice = trimmed.slice(0, 10000);
+			const slice = previewText(trimmed);
 			const n = Math.max(1, slice.length / 100);
-			const highlightResult = this.ext.hljs?.highlightAuto(slice);
+			const highlightResult = await this.ext.highlight(slice, null, cancellable);
 			if (highlightResult && highlightResult.language && highlightResult.relevance / n >= 3) {
-				const id = highlightResult.language;
-				const name = this.ext.hljs?.getLanguage(id)?.name ?? id;
+				const { id, name } = highlightResult.language;
 
 				const metadata = {
 					language: { id, name: id.length < name.length - 3 ? id.charAt(0) + id.slice(1) : name },

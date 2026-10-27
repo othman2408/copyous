@@ -22,6 +22,8 @@ export class CodeItem extends ClipboardItem {
 	constructor(ext: CopyousExtension, entry: ClipboardEntry) {
 		super(ext, entry, Icon.Code, _('Code'));
 
+		this.connect('destroy', () => this.cleanupCodeItem());
+
 		this.codeItemSettings = this.ext.settings.get_child('code-item');
 
 		this.add_style_class_name('code-item');
@@ -94,11 +96,9 @@ export class CodeItem extends ClipboardItem {
 		}
 	}
 
-	override destroy() {
+	private cleanupCodeItem(): void {
 		this.codeItemSettings.disconnectObject(this);
 		this.ext.settings.disconnectObject(this._code);
 		this.entry.disconnectObject(this);
-
-		super.destroy();
 	}
 }

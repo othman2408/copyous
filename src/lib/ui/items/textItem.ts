@@ -23,6 +23,8 @@ export class TextItem extends ClipboardItem {
 	constructor(ext: CopyousExtension, entry: ClipboardEntry) {
 		super(ext, entry, Icon.Text, _('Text'));
 
+		this.connect('destroy', () => this.cleanupTextItem());
+
 		this.textItemSettings = this.ext.settings.get_child('text-item');
 
 		this.add_style_class_name('text-item');
@@ -41,7 +43,7 @@ export class TextItem extends ClipboardItem {
 		this.ext.settings.connectObject('changed::tab-width', this.updateText.bind(this), this._text);
 
 		entry.bind_property('content', this._text, 'label', GObject.BindingFlags.SYNC_CREATE);
-		entry.connectObject('notify::content', this.updateTextInfo.bind(this));
+		entry.connectObject('notify::content', this.updateTextInfo.bind(this), this);
 
 		this.updateText();
 		this.updateTextInfo();
@@ -65,11 +67,9 @@ export class TextItem extends ClipboardItem {
 		}
 	}
 
-	override destroy() {
+	private cleanupTextItem(): void {
 		this.textItemSettings.disconnectObject(this);
 		this.ext.settings.disconnectObject(this._text);
 		this.entry.disconnectObject(this);
-
-		super.destroy();
 	}
 }

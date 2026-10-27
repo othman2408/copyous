@@ -1,11 +1,13 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
+import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
 import St from 'gi://St';
 
 import type CopyousExtension from '../../../extension.js';
 import { registerClass } from '../../common/gjs.js';
+import { previewText } from '../../common/preview.js';
 import { CustomColorScheme } from '../../common/settings.js';
 import { Language } from '../../database/database.js';
 import { normalizeIndentation, trim } from './label.js';
@@ -263,12 +265,15 @@ export class CodeLabel extends St.Label {
 	private _showLineNumbers = true;
 
 	private _highlighted: string = '';
+	private _disconnectHljs: (() => void) | undefined;
 
 	public constructor(
 		private ext: CopyousExtension,
 		props: Partial<St.Label.ConstructorProps & CodeLabelConstructorProps>,
 	) {
 		super({ ...props, min_height: 0, clip_to_allocation: true });
+
+		this.connect('destroy', () => this.cleanupCodeLabel());
 		this.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
 		this.clutter_text.ellipsize = Pango.EllipsizeMode.END;
 
@@ -291,17 +296,18 @@ export class CodeLabel extends St.Label {
 		}
 
 		// Update text after hljs is loaded
-		this.ext.connectHljsInit(this.updateText.bind(this));
+		this._disconnectHljs = this.ext.connectHljsInit(this.updateText.bind(this));
 
 		this.updateText();
 	}
 
-	override destroy(): void {
+	private cleanupCodeLabel(): void {
+		this._disposed = true;
+		this._highlightRequest.cancel();
+		this._disconnectHljs?.();
 		if (this._colorSchemeChangedId >= 0) {
 			this.ext.themeManager?.disconnect(this._colorSchemeChangedId);
 		}
-
-		super.destroy();
 	}
 
 	get code() {
@@ -359,32 +365,32 @@ export class CodeLabel extends St.Label {
 		this.notify('tab-width');
 	}
 
+	private _highlightRequest = new Gio.Cancellable();
+	private _disposed = false;
+
 	private updateText() {
 		if (this._code == null) return;
 
-		// Trim indentation before highlighting to prevent empty lines
-		let text = normalizeIndentation(trim(this._code), this.tabWidth);
-		if (this.syntaxHighlighting && this.ext.hljs != null) {
-			const language =
-				this.language && this.ext.hljs.getLanguage(this.language.id) != null ? this.language.id : null;
-
-			const result = language ? this.ext.hljs.highlight(text, { language }) : this.ext.hljs.highlightAuto(text);
-			text = applyTheme(this.ext.themeManager?.colorScheme, result.value);
-
-			// Store language
-			if (!language && result.language) {
-				const id = result.language;
-				const name = this.ext.hljs.getLanguage(id)?.name ?? id;
-
-				this._language = { id, name: id.length < name.length - 3 ? id.charAt(0) + id.slice(1) : name };
-				this.notify('language');
-			}
-		} else {
-			text = GLib.markup_escape_text(text, text.length);
-		}
-
-		this._highlighted = text;
+		if (this._disposed) return;
+		this._highlightRequest.cancel();
+		const request = new Gio.Cancellable();
+		this._highlightRequest = request;
+		const text = normalizeIndentation(trim(previewText(this._code)), this.tabWidth);
+		this._highlighted = GLib.markup_escape_text(text, -1);
 		this.updateLabel();
+		if (!this.syntaxHighlighting) return;
+		this.ext
+			.highlight(text, this.language?.id ?? null, request)
+			.then((result) => {
+				if (!result || this._disposed || request.is_cancelled()) return;
+				this._highlighted = applyTheme(this.ext.themeManager?.colorScheme, result.value);
+				if (!this.language && result.language) {
+					this._language = result.language;
+					this.notify('language');
+				}
+				this.updateLabel();
+			})
+			.catch(() => {});
 	}
 
 	private updateLabel() {

@@ -21,6 +21,8 @@ export class CharacterItem extends ClipboardItem {
 	constructor(ext: CopyousExtension, entry: ClipboardEntry) {
 		super(ext, entry, Icon.Character, _('Char'));
 
+		this.connect('destroy', () => this.cleanupCharacterItem());
+
 		this.characterItemSettings = this.ext.settings.get_child('character-item');
 
 		this.add_style_class_name('character-item');
@@ -83,9 +85,7 @@ export class CharacterItem extends ClipboardItem {
 		this._character.set_style(`font-size: ${characterSize}px;`);
 	}
 
-	override destroy() {
+	private cleanupCharacterItem(): void {
 		this.characterItemSettings.disconnectObject(this);
-
-		super.destroy();
 	}
 }

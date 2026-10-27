@@ -31,11 +31,14 @@ export class ImageItem extends ClipboardItem {
 
 	private readonly _imagePreview: ImagePreview;
 	private _imageInfo?: ContentInfo;
+	private _infoLoading = false;
 
 	private readonly _cancellable: Gio.Cancellable = new Gio.Cancellable();
 
 	constructor(ext: CopyousExtension, entry: ClipboardEntry) {
 		super(ext, entry, Icon.Image, _('Image'));
+
+		this.connect('destroy', () => this.cleanupImageItem());
 
 		this.imageItemSettings = this.ext.settings.get_child('image-item');
 
@@ -83,14 +86,22 @@ export class ImageItem extends ClipboardItem {
 	}
 
 	private configureImageInfo() {
-		if (this._imageInfo === undefined && this.showImageInfo) {
+		if (this._imageInfo === undefined && this.showImageInfo && !this._infoLoading) {
+			this._infoLoading = true;
 			createFileInfo(this.ext, Gio.File.new_for_uri(this.entry.content), FileType.Image, this._cancellable)
 				.then((imageInfo) => {
+					if (this._cancellable.is_cancelled()) {
+						imageInfo.destroy();
+						return;
+					}
 					this._imageInfo = imageInfo;
 					this._content.add_child(this._imageInfo);
 					this.configureImageInfo();
 				})
-				.catch(() => {});
+				.catch(() => {})
+				.finally(() => {
+					this._infoLoading = false;
+				});
 		}
 
 		if (this._imageInfo == null) {
@@ -105,10 +116,8 @@ export class ImageItem extends ClipboardItem {
 		}
 	}
 
-	override destroy() {
+	private cleanupImageItem(): void {
 		this.imageItemSettings.disconnectObject(this);
 		this._cancellable.cancel();
-
-		super.destroy();
 	}
 }

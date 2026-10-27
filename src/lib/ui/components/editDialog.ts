@@ -172,20 +172,8 @@ export class LanguagePopupMenu extends PopupMenu.PopupMenu<LanguagePopupMenuSign
 		const section = new ScrollablePopupMenuSection();
 		this.addMenuItem(section);
 
-		if (ext.hljs) {
-			const languages = ext.hljs
-				.listLanguages()
-				.map((language) => {
-					return {
-						id: language,
-						name: ext.hljs?.getLanguage(language)?.name ?? language,
-					};
-				})
-				.sort((a, b) => a.name.localeCompare(b.name));
-
-			for (const language of languages) {
-				section.addAction(language.name, () => this.emit('language', language));
-			}
+		for (const language of [...ext.languages].sort((a, b) => a.name.localeCompare(b.name))) {
+			section.addAction(language.name, () => this.emit('language', language));
 		}
 	}
 }
@@ -208,6 +196,8 @@ export class LanguageButton extends St.Button {
 			can_focus: true,
 			x_expand: true,
 		});
+
+		this.connect('destroy', () => this.cleanupLanguageButton());
 
 		this._language = language;
 
@@ -251,9 +241,8 @@ export class LanguageButton extends St.Button {
 		this._popupMenu.open(BoxPointer.PopupAnimation.FULL);
 	}
 
-	override destroy() {
+	private cleanupLanguageButton(): void {
 		this._popupMenu.destroy();
-		super.destroy();
 	}
 }
 

@@ -42,6 +42,8 @@ export class StatusItem extends St.BoxLayout {
 			y_expand: true,
 		});
 
+		this.connect('destroy', () => this.cleanupStatusItem());
+
 		this._state = State.Empty;
 
 		const box = new St.BoxLayout({
@@ -113,9 +115,7 @@ export class StatusItem extends St.BoxLayout {
 		this.height = this.ext.settings.get_int('item-height');
 	}
 
-	override destroy() {
+	private cleanupStatusItem(): void {
 		this.ext.settings.disconnectObject(this);
-
-		super.destroy();
 	}
 }

@@ -54,6 +54,8 @@ export class ClipboardItem extends St.Button {
 			height: 200,
 		});
 
+		this.connect('destroy', () => this.cleanupClipboardItem());
+
 		this._box = new St.Widget({
 			style_class: 'clipboard-item-box',
 			x_expand: true,
@@ -298,9 +300,7 @@ export class ClipboardItem extends St.Button {
 		return [height, height];
 	}
 
-	override destroy() {
+	private cleanupClipboardItem(): void {
 		this.ext.settings.disconnectObject(this);
-
-		super.destroy();
 	}
 }

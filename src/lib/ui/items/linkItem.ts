@@ -65,6 +65,8 @@ export class LinkPreview extends St.Widget {
 			y_align: Clutter.ActorAlign.FILL,
 		});
 
+		this.connect('destroy', () => this.cleanupLinkPreview());
+
 		this._title = new St.Label({ style_class: 'link-title', visible: false });
 		this.add_child(this._title);
 
@@ -152,6 +154,7 @@ export class LinkPreview extends St.Widget {
 
 			tryGetLinkImage(this.ext, this._metadata.image, this._cancellable)
 				.then((image) => {
+					if (this._cancellable.is_cancelled()) return;
 					if (image) {
 						this._image = new ImagePreview(this.ext, image);
 						this._image.backgroundSize = this._backgroundSize;
@@ -284,9 +287,8 @@ export class LinkPreview extends St.Widget {
 		}
 	}
 
-	override destroy() {
+	private cleanupLinkPreview(): void {
 		this._cancellable.cancel();
-		super.destroy();
 	}
 }
 
@@ -298,9 +300,12 @@ export class LinkItem extends ClipboardItem {
 	private readonly _url: St.Label;
 
 	private readonly _cancellable: Gio.Cancellable = new Gio.Cancellable();
+	private _metadataLoading = false;
 
 	constructor(ext: CopyousExtension, entry: ClipboardEntry) {
 		super(ext, entry, Icon.Link, _('Link'));
+
+		this.connect('destroy', () => this.cleanupLinkItem());
 
 		this.linkItemSettings = this.ext.settings.get_child('link-item');
 
@@ -361,17 +366,18 @@ export class LinkItem extends ClipboardItem {
 		if (this.entry.metadata) {
 			const metadata: LinkMetadata = { title: null, description: null, image: null, ...this.entry.metadata };
 			this._linkPreview.metadata ??= metadata;
-		} else if (show) {
+		} else if (show && !this._metadataLoading) {
+			this._metadataLoading = true;
 			const metadata = await tryGetMetadata(this.ext, url, this._cancellable);
+			this._metadataLoading = false;
+			if (this._cancellable.is_cancelled()) return;
 			this.entry.metadata = metadata;
 			this._linkPreview.metadata = metadata;
 		}
 	}
 
-	override destroy() {
+	private cleanupLinkItem(): void {
 		this.linkItemSettings.disconnectObject(this);
 		this._cancellable.cancel();
-
-		super.destroy();
 	}
 }

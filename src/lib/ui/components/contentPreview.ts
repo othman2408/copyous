@@ -1,7 +1,6 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
 import St from 'gi://St';
 
@@ -12,6 +11,7 @@ import { ActiveState, getCachePath } from '../../common/constants.js';
 import { enumParamSpec, flagsParamSpec, registerClass } from '../../common/gjs.js';
 import { Icon, loadIcon } from '../../common/icons.js';
 import { BackgroundSize, FilePreviewType } from '../../common/settings.js';
+import { runMediaWorker } from '../../misc/mediaWorker.js';
 import { CodeLabel, CodeLabelConstructorProps } from './codeLabel.js';
 
 export const FileType = {
@@ -37,44 +37,33 @@ export class ContentPreview extends St.BoxLayout {
 	}
 }
 
-/**
- * Largest image edge that is passed to St as a background-image directly.
- * Anything larger gets a cached downscaled copy, since St crashes gnome-shell
- * when the texture cache fails to load an image (e.g. one that exceeds
- * GL_MAX_TEXTURE_SIZE, usually 16384px).
- */
-const MAX_PREVIEW_EDGE = 4096;
-const PREVIEW_TARGET_EDGE = 1024;
+Gio._promisify(Gio.InputStream.prototype, 'close_async');
+Gio._promisify(Gio.File.prototype, 'delete_async');
 
-/**
- * Gets a file that is safe to use as a preview background-image
- * @param ext The extension
- * @param image The original image
- * @param width The width of the original image
- * @param height The height of the original image
- * @returns The original image if it is small enough, otherwise a cached downscaled copy
- */
-function getSafePreviewFile(ext: Extension, image: Gio.File, width: number, height: number): Gio.File {
-	if (width <= MAX_PREVIEW_EDGE && height <= MAX_PREVIEW_EDGE) return image;
-
-	const uri = image.get_uri();
-	const key = GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, uri, uri.length);
-	const previewDir = getCachePath(ext).get_child('previews');
-	if (!previewDir.query_exists(null)) previewDir.make_directory_with_parents(null);
-
-	const preview = previewDir.get_child(`${key}.png`);
-	if (!preview.query_exists(null)) {
-		const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(
-			image.get_path()!,
-			PREVIEW_TARGET_EDGE,
-			PREVIEW_TARGET_EDGE,
-			true,
+/** Disposable workers isolate image decoders and release their working memory on exit. */
+async function getSafePreviewFile(
+	ext: Extension,
+	image: Gio.File,
+	cancellable: Gio.Cancellable,
+): Promise<[Gio.File, number]> {
+	if (cancellable.is_cancelled()) throw new Error('Preview cancelled');
+	const cache = getCachePath(ext).get_child('previews');
+	const temporaryName = `${GLib.uuid_string_random()}.tmp`;
+	try {
+		const result = await runMediaWorker<[string, number]>(
+			ext,
+			'image',
+			{ uri: image.get_uri(), cache: cache.get_uri(), temporaryName },
+			cancellable,
 		);
-		if (!pixbuf.savev(preview.get_path()!, 'png', [], [])) {
-			throw new Error('Failed to save downscaled preview');
-		}
+		return [Gio.File.new_for_uri(result[0]), result[1]];
+	} finally {
+		// The child has exited before unfinished output is removed.
+		await cache
+			.get_child(temporaryName)
+			.delete_async(GLib.PRIORITY_DEFAULT, null)
+			.catch(() => {});
 	}
-	return preview;
 }
 
 @registerClass({
@@ -90,50 +79,59 @@ function getSafePreviewFile(ext: Extension, image: Gio.File, width: number, heig
 })
 export class ImagePreview extends ContentPreview {
 	private _backgroundSize: BackgroundSize = BackgroundSize.Cover;
-	private readonly _ratio: number | null;
-	private readonly _effect?: Clutter.BrightnessContrastEffect;
+	private _ratio: number | null = null;
+	private readonly _cancellable = new Gio.Cancellable();
+	private _started = false;
+	private _effect?: Clutter.BrightnessContrastEffect;
 
 	constructor(ext: Extension, image: Gio.File) {
 		super();
 
+		this.connect('destroy', () => this.cleanupImagePreview());
+
 		this.add_style_class_name('image-preview');
 
-		if (image.query_exists(null)) {
-			try {
-				const [, width, height] = GdkPixbuf.Pixbuf.get_file_info(image.get_path()!);
-				this._ratio = height / width;
+		// Hidden history should not start image decoding during startup or copying.
+		this.connect('notify::mapped', () => {
+			if (!this.mapped || this._started) return;
+			this._started = true;
+			this.load(ext, image).catch(() => {});
+		});
+	}
 
-				const previewFile = getSafePreviewFile(ext, image, width, height);
-				const imageBox = new St.Widget({
-					style_class: 'image-box',
-					x_align: Clutter.ActorAlign.FILL,
-					y_align: Clutter.ActorAlign.FILL,
-					x_expand: true,
-					y_expand: true,
-					style: `background-image: url("${previewFile.get_uri()}");`,
-				});
-				this.add_child(imageBox);
-
-				this._effect = new Clutter.BrightnessContrastEffect();
-				imageBox.add_effect(this._effect);
-				return;
-			} catch {
-				// Ignore
-			}
-		}
-
-		this._ratio = null;
-		this.add_style_class_name('missing-image');
-		this.add_child(
-			new St.Icon({
-				gicon: loadIcon(ext, Icon.MissingImage),
-				x_align: Clutter.ActorAlign.CENTER,
-				y_align: Clutter.ActorAlign.CENTER,
+	private async load(ext: Extension, image: Gio.File) {
+		try {
+			const [preview, ratio] = await getSafePreviewFile(ext, image, this._cancellable);
+			if (this._cancellable.is_cancelled()) return;
+			this._ratio = ratio;
+			const imageBox = new St.Widget({
+				style_class: 'image-box',
 				x_expand: true,
 				y_expand: true,
-				min_height: 0,
-			}),
-		);
+				style: `background-image: url("${preview.get_uri()}");`,
+			});
+			this.add_child(imageBox);
+			this._effect = new Clutter.BrightnessContrastEffect();
+			imageBox.add_effect(this._effect);
+			this.queue_relayout();
+		} catch {
+			if (this._cancellable.is_cancelled()) return;
+			this.add_style_class_name('missing-image');
+			this.add_child(
+				new St.Icon({
+					gicon: loadIcon(ext, Icon.MissingImage),
+					x_align: Clutter.ActorAlign.CENTER,
+					y_align: Clutter.ActorAlign.CENTER,
+					x_expand: true,
+					y_expand: true,
+					min_height: 0,
+				}),
+			);
+		}
+	}
+
+	private cleanupImagePreview(): void {
+		this._cancellable.cancel();
 	}
 
 	get backgroundSize() {
@@ -227,74 +225,20 @@ Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async');
  * Creates a text preview by reading the first 4096 bytes
  * @returns The text preview
  */
-async function createTextPreview(ext: CopyousExtension, file: Gio.File): Promise<TextPreview> {
+async function createTextPreview(
+	ext: CopyousExtension,
+	file: Gio.File,
+	cancellable: Gio.Cancellable | null,
+): Promise<TextPreview> {
 	const extension = file.get_uri().match(/\.(\w+)$/)?.[1];
-	const stream = await file.read_async(GLib.PRIORITY_DEFAULT, null);
-	const bytes = await stream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, null);
-	const text = new TextDecoder().decode(bytes.toArray());
-	return new TextPreview(ext, text, extension);
-}
-
-/**
- * Gets the thumbnail for a file
- * @param file The file to get the thumbnail for
- * @returns The thumbnail or null if no thumbnail was found
- */
-async function tryGetThumbnail(file: Gio.File): Promise<Gio.File | null> {
-	const uri = file.get_uri();
-	const md5 = GLib.compute_checksum_for_string(GLib.ChecksumType.MD5, uri, uri.length);
-
-	const homeDir = GLib.get_home_dir();
-	const thumbnailDir = Gio.File.new_build_filenamev([homeDir, '.cache', 'thumbnails']);
-
+	const stream = await file.read_async(GLib.PRIORITY_DEFAULT, cancellable);
 	try {
-		const enumerator = await thumbnailDir.enumerate_children_async(
-			'standard::*',
-			Gio.FileQueryInfoFlags.NONE,
-			GLib.PRIORITY_DEFAULT,
-			null,
-		);
-		for await (const f of enumerator) {
-			if (f.get_file_type() !== Gio.FileType.DIRECTORY) continue;
-
-			const thumbnailFile = thumbnailDir.get_child(f.get_name()).get_child(`${md5}.png`);
-			if (thumbnailFile.query_exists(null)) {
-				return thumbnailFile;
-			}
-		}
-	} catch {
-		return null;
+		const bytes = await stream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, cancellable);
+		const text = new TextDecoder().decode(bytes.toArray());
+		return new TextPreview(ext, text, extension);
+	} finally {
+		await stream.close_async(GLib.PRIORITY_DEFAULT, null);
 	}
-
-	return null;
-}
-
-/**
- * Gets the content type of a file
- * @param file The file to guess the content type of
- * @returns The content type or null if no content type was found
- */
-async function getContentType(file: Gio.File): Promise<string | null> {
-	const info = await file.query_info_async(
-		'standard::content-type',
-		Gio.FileQueryInfoFlags.NONE,
-		GLib.PRIORITY_DEFAULT,
-		null,
-	);
-	const contentType = info.get_content_type();
-	if (contentType !== null) {
-		return contentType;
-	}
-
-	let data: GLib.Bytes;
-	try {
-		const stream = await file.read_async(GLib.PRIORITY_DEFAULT, null);
-		data = await stream.read_bytes_async(64, GLib.PRIORITY_DEFAULT, null);
-	} catch {
-		return null;
-	}
-
-	return Gio.content_type_guess(file.get_path(), data.toArray())[0];
 }
 
 /**
@@ -302,19 +246,30 @@ async function getContentType(file: Gio.File): Promise<string | null> {
  * @param file The file to find the file type for
  * @returns The file type and a Gio.File if a thumbnail was found for the file
  */
-export async function getFileType(file: Gio.File): Promise<[FileType, Gio.File | null]> {
-	if (!file.query_exists(null)) return [FileType.Unknown, null];
-
-	const fileType = file.query_file_type(Gio.FileQueryInfoFlags.NONE, null);
+export async function getFileType(
+	file: Gio.File,
+	cancellable: Gio.Cancellable | null = null,
+): Promise<[FileType, Gio.File | null]> {
+	let info: Gio.FileInfo;
+	try {
+		info = await file.query_info_async(
+			'standard::type,standard::content-type,thumbnail::path,thumbnail::is-valid',
+			Gio.FileQueryInfoFlags.NONE,
+			GLib.PRIORITY_DEFAULT,
+			cancellable,
+		);
+	} catch {
+		return [FileType.Unknown, null];
+	}
+	const fileType = info.get_file_type();
 	if (fileType === Gio.FileType.DIRECTORY) return [FileType.Directory, null];
-
 	if (fileType !== Gio.FileType.REGULAR) return [FileType.Unknown, null];
-
-	// First check if the file has thumbnail
-	const thumbnail = await tryGetThumbnail(file);
-
-	// Then check if the file has any of the allowed types
-	const contentType = await getContentType(file);
+	const thumbnailPath = info.get_attribute_byte_string('thumbnail::path');
+	const thumbnail =
+		thumbnailPath && info.get_attribute_boolean('thumbnail::is-valid')
+			? Gio.File.new_for_path(thumbnailPath)
+			: null;
+	const contentType = info.get_content_type();
 	if (!contentType) return [FileType.Unknown, thumbnail];
 
 	// Check image before text since svg is also classified as text/plain
@@ -339,22 +294,23 @@ export async function tryCreateFilePreview(
 	file: Gio.File,
 	fileType: FileType,
 	thumbnail: Gio.File | null,
+	cancellable: Gio.Cancellable | null = null,
 ): Promise<ContentPreview | null> {
 	const allowedTypes = ext.settings.get_child('file-item').get_flags('file-preview-types');
 
 	try {
-		if (!file.query_exists(null)) return null;
+		if (cancellable?.is_cancelled()) return null;
 
 		switch (fileType) {
 			case FileType.Text:
-				return allowedTypes & FilePreviewType.Text ? await createTextPreview(ext, file) : null;
+				return allowedTypes & FilePreviewType.Text ? await createTextPreview(ext, file, cancellable) : null;
 			case FileType.Image:
 				return allowedTypes & FilePreviewType.Image ? new ImagePreview(ext, file) : null;
 		}
 
-		return thumbnail && allowedTypes & FilePreviewType.Thumbnail ? new ThumbnailPreview(ext, file) : null;
+		return thumbnail && allowedTypes & FilePreviewType.Thumbnail ? new ThumbnailPreview(ext, thumbnail) : null;
 	} catch (error) {
-		ext.logger.error(error);
+		if (!cancellable?.is_cancelled()) ext.logger.error(error);
 		return null;
 	}
 }

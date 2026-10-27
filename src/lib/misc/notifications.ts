@@ -1,9 +1,6 @@
-import Cogl from 'gi://Cogl';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
-import St from 'gi://St';
 
 import { gettext as _, ngettext } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -13,12 +10,15 @@ import type CopyousExtension from '../../extension.js';
 import { ItemType } from '../common/constants.js';
 import { registerClass } from '../common/gjs.js';
 import { Icon, loadIcon } from '../common/icons.js';
+import { previewText } from '../common/preview.js';
 import { ClipboardEntry } from '../database/database.js';
 import { normalizeIndentation, trim } from '../ui/components/label.js';
 import { commonDirectory } from '../ui/items/filesItem.js';
+import { runMediaWorker } from './mediaWorker.js';
 
 @registerClass()
 export class NotificationManager extends GObject.Object {
+	private readonly cancellable = new Gio.Cancellable();
 	private _source: MessageTray.Source | null = null;
 
 	constructor(private ext: CopyousExtension) {
@@ -61,37 +61,17 @@ export class NotificationManager extends GObject.Object {
 		const notification = new MessageTray.Notification({
 			source,
 			title: _('Copied Text'),
-			body: text,
+			body: previewText(text),
 			gicon: loadIcon(this.ext, Icon.Text),
 			isTransient: true,
 		});
 		source.addNotification(notification);
 	}
 
-	private createImageContent(pixbuf: GdkPixbuf.Pixbuf): St.ImageContent {
-		const context = global.stage.context.get_backend().get_cogl_context();
-		const pixels = pixbuf.get_pixels();
-		const content = new St.ImageContent({
-			preferred_width: pixbuf.width,
-			preferred_height: pixbuf.height,
-		});
-		content.set_bytes(context, pixels, Cogl.PixelFormat.RGBA_8888, pixbuf.width, pixbuf.height, pixbuf.rowstride);
-		return content;
-	}
-
-	public imageNotification(bytes: GLib.Bytes | Uint8Array, width: number, height: number) {
+	public imageNotification(_bytes: GLib.Bytes | Uint8Array, width: number, height: number) {
 		if (!this.ext.settings.get_boolean('send-notification')) return;
 
-		let gicon: Gio.Icon | St.ImageContent;
-		try {
-			const stream = Gio.MemoryInputStream.new_from_bytes(bytes);
-			const pixbuf = GdkPixbuf.Pixbuf.new_from_stream_at_scale(stream, 256, 256, true, null);
-			gicon = this.createImageContent(pixbuf);
-		} catch (error) {
-			this.ext.logger.error(error);
-			return;
-		}
-
+		const gicon = loadIcon(this.ext, Icon.Image);
 		const source = this.source;
 		const notification = new MessageTray.Notification({
 			source,
@@ -103,12 +83,12 @@ export class NotificationManager extends GObject.Object {
 		source.addNotification(notification);
 	}
 
-	public notification(entry: ClipboardEntry) {
+	public async notification(entry: ClipboardEntry) {
 		if (!this.ext.settings.get_boolean('send-notification')) return;
 
 		let title: string;
-		let body: string | null = normalizeIndentation(trim(entry.content), 4);
-		let gicon: Gio.Icon | St.ImageContent;
+		let body: string | null = normalizeIndentation(trim(previewText(entry.content)), 4);
+		let gicon: Gio.Icon;
 		switch (entry.type) {
 			case ItemType.Text:
 				title = _('Copied Text');
@@ -119,24 +99,25 @@ export class NotificationManager extends GObject.Object {
 				gicon = loadIcon(this.ext, Icon.Code);
 				break;
 			case ItemType.Image: {
-				const file = body.substring('file://'.length);
 				title = _('Copied Image');
-
+				gicon = loadIcon(this.ext, Icon.Image);
 				try {
-					const [, width, height] = GdkPixbuf.Pixbuf.get_file_info(file);
-					const pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_scale(file, 256, 256, true);
-					gicon = this.createImageContent(pixbuf);
+					const [width, height] = await runMediaWorker<[number, number]>(
+						this.ext,
+						'image-info',
+						entry.content,
+						this.cancellable,
+					);
+					if (this.cancellable.is_cancelled()) return;
 					body = _('Size: %d×%d px').format(width, height);
-				} catch (error) {
-					this.ext.logger.error(error);
+				} catch {
 					return;
 				}
-
 				break;
 			}
 			case ItemType.File:
 			case ItemType.Files: {
-				const files = body.split('\n').map((f) => Gio.file_new_for_uri(f));
+				const files = entry.content.split('\n').map((f) => Gio.file_new_for_uri(f));
 				const common = files.length === 1 ? files[0]! : commonDirectory(files);
 
 				title = ngettext('Copied %d File', 'Copied %d Files', files.length).format(files.length);
@@ -161,5 +142,11 @@ export class NotificationManager extends GObject.Object {
 		const source = this.source;
 		const notification = new MessageTray.Notification({ source, title, body, gicon, isTransient: true });
 		source.addNotification(notification);
+	}
+
+	public destroy(): void {
+		this.cancellable.cancel();
+		this._source?.destroy(MessageTray.NotificationDestroyedReason.SOURCE_CLOSED);
+		this._source = null;
 	}
 }

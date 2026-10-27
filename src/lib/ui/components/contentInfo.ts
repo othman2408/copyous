@@ -1,9 +1,7 @@
 import Clutter from 'gi://Clutter';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
-import GdkPixbuf from 'gi://GdkPixbuf';
 import Gio from 'gi://Gio';
-import Gst from 'gi://Gst';
 import St from 'gi://St';
 
 import { Extension, gettext as _, ngettext } from 'resource:///org/gnome/shell/extensions/extension.js';
@@ -12,6 +10,7 @@ import type CopyousExtension from '../../../extension.js';
 import { enumParamSpec, registerClass } from '../../common/gjs.js';
 import { Icon, loadIcon } from '../../common/icons.js';
 import { TextCountMode } from '../../common/settings.js';
+import { runMediaWorker } from '../../misc/mediaWorker.js';
 import { FileType } from './contentPreview.js';
 
 function formatBytes(bytes: number): [string, string] {
@@ -34,14 +33,6 @@ function formatTime(seconds: number): string {
 	res += _('%ds').format(s);
 
 	return res;
-}
-
-function countLines(text: string): number {
-	let count = 1;
-	for (let i = 0; i < text.length; i++) {
-		if (text[i] === '\n') count++;
-	}
-	return count;
 }
 
 @registerClass()
@@ -81,6 +72,7 @@ export class TextInfo extends ContentInfo {
 
 	private _text: string;
 	private _textCountMode: TextCountMode;
+	private _countSource = 0;
 
 	constructor(text: string, textCountMode: TextCountMode) {
 		super();
@@ -90,6 +82,11 @@ export class TextInfo extends ContentInfo {
 
 		this._text = text;
 		this._textCountMode = textCountMode;
+		this.connect('notify::mapped', () => this.updateCount());
+		this.connect('destroy', () => {
+			if (this._countSource) GLib.source_remove(this._countSource);
+			this._countSource = 0;
+		});
 		this.updateCount();
 	}
 
@@ -106,24 +103,47 @@ export class TextInfo extends ContentInfo {
 	}
 
 	private updateCount() {
-		if (this._textCountMode === TextCountMode.Characters) {
-			const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
-			let count = 0;
-			for (const _segment of segmenter.segment(this._text)) count++;
-
-			this._countLabel.text = ngettext('%d char', '%d chars', count).format(count);
-		} else if (this._textCountMode === TextCountMode.Words) {
-			const segmenter = new Intl.Segmenter(undefined, { granularity: 'word' });
-			let count = 0;
-			for (const segment of segmenter.segment(this._text)) {
-				if (segment.isWordLike) count++;
-			}
-
-			this._countLabel.text = ngettext('%d word', '%d words', count).format(count);
-		} else if (this._textCountMode === TextCountMode.Lines) {
-			const count = countLines(this._text);
-			this._countLabel.text = ngettext('%d line', '%d lines', count).format(count);
-		}
+		if (this._countSource) GLib.source_remove(this._countSource);
+		this._countSource = 0;
+		if (!this.mapped) return;
+		const mode = this._textCountMode;
+		const text = this._text;
+		const iterator =
+			mode === TextCountMode.Lines
+				? null
+				: new Intl.Segmenter(undefined, {
+						granularity: mode === TextCountMode.Words ? 'word' : 'grapheme',
+					})
+						.segment(text)
+						[Symbol.iterator]();
+		let count = mode === TextCountMode.Lines ? 1 : 0;
+		let offset = 0;
+		this._countLabel.text = '…';
+		this._countSource = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+			const deadline = GLib.get_monotonic_time() + 2000;
+			let done: boolean;
+			do {
+				if (iterator) {
+					const next = iterator.next();
+					done = next.done ?? false;
+					if (!done && (mode !== TextCountMode.Words || next.value?.isWordLike)) count++;
+				} else {
+					const end = Math.min(offset + 4096, text.length);
+					for (; offset < end; offset++) if (text[offset] === '\n') count++;
+					done = offset === text.length;
+				}
+			} while (!done && GLib.get_monotonic_time() < deadline);
+			if (!done) return GLib.SOURCE_CONTINUE;
+			this._countSource = 0;
+			const label =
+				mode === TextCountMode.Characters
+					? ngettext('%d char', '%d chars', count)
+					: mode === TextCountMode.Words
+						? ngettext('%d word', '%d words', count)
+						: ngettext('%d line', '%d lines', count);
+			this._countLabel.text = label.format(count);
+			return GLib.SOURCE_REMOVE;
+		});
 	}
 }
 
@@ -245,24 +265,35 @@ export class MediaInfo extends FileInfo {
 }
 
 Gio._promisify(Gio.File.prototype, 'enumerate_children_async');
+Gio._promisify(Gio.FileEnumerator.prototype, 'next_files_async');
+Gio._promisify(Gio.FileEnumerator.prototype, 'close_async');
 
-export async function tryCreateDirectoryFileInfo(ext: Extension, file: Gio.File): Promise<DirectoryInfo | null> {
+export async function tryCreateDirectoryFileInfo(
+	ext: Extension,
+	file: Gio.File,
+	cancellable: Gio.Cancellable,
+): Promise<DirectoryInfo | null> {
 	try {
 		const enumerator = await file.enumerate_children_async(
-			'standard::*',
+			'standard::type',
 			Gio.FileQueryInfoFlags.NONE,
 			GLib.PRIORITY_DEFAULT,
-			null,
+			cancellable,
 		);
 		let directoryCount = 0;
 		let fileCount = 0;
-		for await (const f of enumerator) {
-			const fileType = f.get_file_type();
-			if (fileType === Gio.FileType.DIRECTORY) {
-				directoryCount++;
-			} else if (fileType === Gio.FileType.REGULAR) {
-				fileCount++;
+		try {
+			while (!cancellable.is_cancelled()) {
+				// eslint-disable-next-line no-await-in-loop
+				const files = await enumerator.next_files_async(64, GLib.PRIORITY_DEFAULT, cancellable);
+				if (files.length === 0) break;
+				for (const f of files) {
+					if (f.get_file_type() === Gio.FileType.DIRECTORY) directoryCount++;
+					else if (f.get_file_type() === Gio.FileType.REGULAR) fileCount++;
+				}
 			}
+		} finally {
+			await enumerator.close_async(GLib.PRIORITY_DEFAULT, null);
 		}
 
 		return new DirectoryInfo(ext, directoryCount, fileCount);
@@ -271,9 +302,15 @@ export async function tryCreateDirectoryFileInfo(ext: Extension, file: Gio.File)
 	}
 }
 
-export function tryCreateImageInfo(file: Gio.File, size: number): ImageInfo | null {
+export async function tryCreateImageInfo(
+	ext: Extension,
+	file: Gio.File,
+	size: number,
+	cancellable: Gio.Cancellable,
+): Promise<ImageInfo | null> {
 	try {
-		const [, width, height] = GdkPixbuf.Pixbuf.get_file_info(file.get_path()!);
+		const [width, height] = await runMediaWorker<[number, number]>(ext, 'image-info', file.get_uri(), cancellable);
+		if (cancellable.is_cancelled()) return null;
 		return new ImageInfo(size, width, height);
 	} catch {
 		return null;
@@ -287,47 +324,9 @@ export async function tryCreateMediaFileInfo(
 	cancellable: Gio.Cancellable,
 ): Promise<MediaInfo | null> {
 	try {
-		if (!Gst.is_initialized()) {
-			Gst.init(undefined);
-		}
-
-		// https://gitlab.freedesktop.org/gstreamer/gst-plugins-base/-/blob/ce69d1068af058425b083aaa1b8c268b1b2e5ddd/gst-libs/gst/pbutils/gstdiscoverer.c#L340
-		const pipeline = Gst.parse_launch(`uridecodebin uri="${file.get_uri()}"`);
-		pipeline.set_state(Gst.State.PAUSED);
-
-		// https://gitlab.freedesktop.org/gstreamer/gst-plugins-base/-/blob/ce69d1068af058425b083aaa1b8c268b1b2e5ddd/gst-libs/gst/pbutils/gstdiscoverer.c#L1417
-		let [success, duration] = pipeline.query_duration(Gst.Format.TIME);
-		if (!success) {
-			pipeline.set_state(Gst.State.PLAYING);
-
-			await new Promise<void>((resolve) => {
-				let i = 0;
-				const timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
-					[success, duration] = pipeline.query_duration(Gst.Format.TIME);
-					if (success || i >= 5) {
-						resolve();
-						cancellable.disconnect(cancellableId);
-						return GLib.SOURCE_REMOVE;
-					}
-
-					i++;
-					cancellable.disconnect(cancellableId);
-					return GLib.SOURCE_CONTINUE;
-				});
-
-				const cancellableId = cancellable.connect(() => GLib.source_remove(timeoutId));
-			});
-		}
-
-		pipeline.set_state(Gst.State.NULL);
-
-		if (success && duration >= 0) {
-			return new MediaInfo(ext, size, duration / (Gst.SECOND as unknown as number));
-		} else {
-			return null;
-		}
-	} catch (err) {
-		ext.logger.error(err);
+		const duration = await runMediaWorker<number | null>(ext, 'media-info', file.get_uri(), cancellable);
+		return duration === null || cancellable.is_cancelled() ? null : new MediaInfo(ext, size, duration);
+	} catch {
 		return null;
 	}
 }
@@ -339,25 +338,21 @@ export async function createFileInfo(
 	cancellable: Gio.Cancellable,
 ): Promise<FileInfo> {
 	try {
-		if (!file.query_exists(null)) {
-			return new MissingFileInfo(ext);
-		}
-
 		const info = await file.query_info_async(
 			Gio.FILE_ATTRIBUTE_STANDARD_SIZE,
 			Gio.FileQueryInfoFlags.NONE,
 			GLib.PRIORITY_DEFAULT,
-			null,
+			cancellable,
 		);
 		const size = info.get_size();
 
 		let fileInfo: FileInfo | null = null;
 		switch (fileType) {
 			case FileType.Directory:
-				fileInfo = await tryCreateDirectoryFileInfo(ext, file);
+				fileInfo = await tryCreateDirectoryFileInfo(ext, file, cancellable);
 				break;
 			case FileType.Image:
-				fileInfo = tryCreateImageInfo(file, size);
+				fileInfo = await tryCreateImageInfo(ext, file, size, cancellable);
 				break;
 			case FileType.Audio:
 			case FileType.Video:
@@ -366,7 +361,9 @@ export async function createFileInfo(
 		}
 
 		return fileInfo ?? new FileInfo(size);
-	} catch {
+	} catch (error) {
+		if (error instanceof GLib.Error && error.matches(Gio.io_error_quark(), Gio.IOErrorEnum.NOT_FOUND))
+			return new MissingFileInfo(ext);
 		return new ErrorFileInfo(ext);
 	}
 }

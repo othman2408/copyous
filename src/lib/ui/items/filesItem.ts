@@ -36,9 +36,11 @@ export class FilesPreview extends ContentPreview {
 	private readonly _files: St.BoxLayout;
 	private readonly _border: St.Widget;
 	private readonly _moreFiles: St.Label;
+	private readonly _totalFiles: number;
 
 	constructor(files: string[]) {
 		super();
+		this._totalFiles = files.length;
 
 		this.add_style_class_name('files-preview');
 
@@ -51,7 +53,7 @@ export class FilesPreview extends ContentPreview {
 		});
 		this.add_child(this._files);
 
-		for (const file of files) {
+		for (const file of files.slice(0, 40)) {
 			const label = new St.Label({
 				style_class: 'files-preview-item',
 				text: file.trim(),
@@ -90,7 +92,7 @@ export class FilesPreview extends ContentPreview {
 		const maxHeight = box.get_height();
 
 		this._border.visible = true;
-		if (nat - lastChildNat * 0.5 < maxHeight) {
+		if (this._totalFiles <= 40 && nat - lastChildNat * 0.5 < maxHeight) {
 			for (const file of this._files.get_children()) file.visible = true;
 			this._moreFiles.visible = false;
 
@@ -115,7 +117,7 @@ export class FilesPreview extends ContentPreview {
 			}
 
 			// More files label
-			const n = this._files.get_n_children() - count;
+			const n = this._totalFiles - count;
 			this._moreFiles.text = count
 				? ngettext('%d more file', '%d more files', n).format(n)
 				: ngettext('%d file', '%d files', n).format(n);
