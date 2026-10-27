@@ -24,7 +24,6 @@ export async function checkGda(prefs: ExtensionPreferences): Promise<boolean> {
 	try {
 		const Gda = (await import('gi://Gda')).default;
 
-		// Check if SQLite provider is installed
 		Gda.Config.get_provider('SQLite');
 
 		return true;
@@ -87,7 +86,6 @@ class GuideDialog extends Adw.Dialog {
 			child: content,
 		});
 
-		// Title
 		content.append(
 			new Gtk.Label({
 				label: title,
@@ -95,7 +93,6 @@ class GuideDialog extends Adw.Dialog {
 			}),
 		);
 
-		// Subtitle
 		content.append(
 			new Gtk.Label({
 				label: subtitle,
@@ -106,7 +103,6 @@ class GuideDialog extends Adw.Dialog {
 			}),
 		);
 
-		// Install guide
 		const installGuide = new Adw.PreferencesGroup({
 			title: guideTitle,
 		});
@@ -244,21 +240,17 @@ async function downloadHljsModule(
 			return false;
 		}
 
-		// Check if URL is valid
 		const uri = GLib.uri_parse(url, GLib.UriFlags.NONE);
 
-		// Download page
 		const session = new Soup.Session({ user_agent: UserAgent, idle_timeout: 5 });
 		const message = Soup.Message.new_from_uri('GET', uri);
 
-		// Send request
 		const response = await session.send_and_read_async(message, GLib.PRIORITY_DEFAULT, cancellable);
 		if (response == null) return false;
 
 		const data = response.get_data();
 		if (data == null) return false;
 
-		// Check integrity
 		const sha512 = GLib.compute_checksum_for_bytes(GLib.ChecksumType.SHA512, data);
 		if (sha512 !== hash) {
 			prefs
@@ -269,7 +261,6 @@ async function downloadHljsModule(
 			return false;
 		}
 
-		// Write to file
 		const parent = path.get_parent()!;
 		if (!parent.query_exists(cancellable)) parent.make_directory_with_parents(cancellable);
 
@@ -369,24 +360,19 @@ export class DependenciesWarningButton extends Gtk.MenuButton {
 			if (response === 'install') {
 				hljsAction.enabled = false;
 
-				// Show start download toast
 				const toast = new Adw.Toast({ title: _('Starting Highlight.js Download') });
 				window.add_toast(toast);
 
-				// Show spinner
 				const spinner = new Gtk.Image();
 				spinner.paintable = new Adw.SpinnerPaintable({ widget: spinner });
 				this.child = spinner;
 				this.remove_css_class('warning');
 
-				// Start download
 				const success = await downloadHljs(prefs, this._cancellable);
 
-				// Hide spinner
 				this.set_child(null);
 				this.add_css_class('warning');
 
-				// Show end download toast
 				toast.dismiss();
 				window.add_toast(
 					new Adw.Toast({
@@ -416,10 +402,8 @@ export class DependenciesWarningButton extends Gtk.MenuButton {
 			}
 		});
 
-		// Cancel operations on destroy
 		this.connect('destroy', () => this._cancellable.cancel());
 
-		// Menu
 		const actionGroup = new Gio.SimpleActionGroup();
 
 		const libgdaAction = Gio.SimpleAction.new('libgda', null);
@@ -442,7 +426,6 @@ export class DependenciesWarningButton extends Gtk.MenuButton {
 		this._menu.append(_('Highlight.js Not Installed'), 'dependencies.hljs');
 		this.menu_model = this._menu;
 
-		// Checks
 		checkGda(prefs)
 			.then((libgda) => {
 				this._libgda = libgda;
@@ -465,7 +448,6 @@ export class DependenciesWarningButton extends Gtk.MenuButton {
 				if (hljs) {
 					this.deleteItem('hljs');
 				} else {
-					// Open dialog for the first time if hljs is not installed
 					const settings: CopyousSettings = prefs.getSettings();
 					if (!settings.get_boolean('disable-hljs-dialog')) {
 						hljsDialog.present(window);
