@@ -32,7 +32,7 @@ class DeleteDialog extends Adw.AlertDialog {
 
 		this.add_response('cancel', _('Cancel'));
 		this.add_response('delete', _('Delete'));
-		this.close_response = 'delete';
+		this.close_response = 'cancel';
 		this.default_response = 'cancel';
 		this.set_response_appearance('delete', Adw.ResponseAppearance.DESTRUCTIVE);
 	}

@@ -20,7 +20,7 @@ class ResetDialog extends Adw.AlertDialog {
 
 		this.add_response('cancel', _('Cancel'));
 		this.add_response('reset', _('Reset'));
-		this.close_response = 'reset';
+		this.close_response = 'cancel';
 		this.default_response = 'cancel';
 		this.set_response_appearance('reset', Adw.ResponseAppearance.DESTRUCTIVE);
 	}
@@ -33,7 +33,7 @@ class RestoreDialog extends Adw.AlertDialog {
 
 		this.add_response('cancel', _('Cancel'));
 		this.add_response('restore', _('Restore'));
-		this.close_response = 'restore';
+		this.close_response = 'cancel';
 		this.default_response = 'cancel';
 		this.set_response_appearance('restore', Adw.ResponseAppearance.SUGGESTED);
 	}
