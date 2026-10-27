@@ -3,19 +3,18 @@ import Gio from 'gi://Gio';
 
 import { ConsoleLike, Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
-import type { HLJSApi } from 'highlight.js';
-import type { LanguageFn } from 'highlight.js';
-
 import { getDataPath, getHljsLanguages, getHljsPath } from './lib/common/constants.js';
 import { DbusService } from './lib/common/dbus.js';
 import { ClipboardHistory, CopyousSettings, migrateSettings } from './lib/common/settings.js';
 import { SoundManager, tryCreateSoundManager } from './lib/common/sound.js';
-import { ClipboardEntry } from './lib/database/database.js';
+import type { HighlightResult } from './lib/common/workerProtocol.js';
+import { ClipboardEntry, type Language } from './lib/database/database.js';
 import { ClipboardEntryTracker } from './lib/database/entryTracker.js';
 import { ClipboardManager } from './lib/misc/clipboard.js';
 import { NotificationManager } from './lib/misc/notifications.js';
 import { ShortcutManager } from './lib/misc/shortcuts.js';
 import { ThemeManager } from './lib/misc/theme.js';
+import { WorkerClient } from './lib/misc/worker.js';
 import { ClipboardDialog } from './lib/ui/clipboardDialog.js';
 import { ClipboardIndicator } from './lib/ui/indicator.js';
 
@@ -23,10 +22,11 @@ export default class CopyousExtension extends Extension {
 	public settings!: CopyousSettings;
 	public logger!: ConsoleLike;
 
-	public hljs: HLJSApi | null | undefined;
-	private hljsMonitor: Gio.FileMonitor | undefined;
-	private hljsLanguages: Map<string, boolean> | undefined;
-	private hljsCallbacks: (() => void)[] | undefined;
+	public languages: Language[] = [];
+	private processor: WorkerClient | undefined;
+	private hljsMonitors: Gio.FileMonitor[] = [];
+	private processorRetryAt = 0;
+	private hljsCallbacks: Set<() => void> | undefined;
 
 	public themeManager: ThemeManager | undefined;
 
@@ -45,15 +45,21 @@ export default class CopyousExtension extends Extension {
 	private updateHistory: boolean = false;
 
 	public clipboardManager: ClipboardManager | undefined;
+	private lifecycle = 0;
+	private entryLoadId = 0;
+	private entryLoadGeneration = 0;
+	private historyGeneration = 0;
+	private databaseShutdown: Promise<void> = Promise.resolve();
 
 	override enable() {
+		const lifecycle = ++this.lifecycle;
 		this.settings = this.getSettings();
 		migrateSettings(this.settings);
 
 		this.logger = this.getLogger();
 		const error = this.logger.error.bind(this.logger);
 
-		// Highlight.js
+		// Highlight.js runs in a separate process.
 		this.initHljs().catch(error);
 
 		// Theme
@@ -66,6 +72,7 @@ export default class CopyousExtension extends Extension {
 			async () => {
 				// Update the history when the dialog is closed and an update was scheduled while the dialog was open
 				if (!this.clipboardDialog?.opened && this.updateHistory) {
+					this.updateHistory = false;
 					await this.entryTracker?.deleteOldest();
 				}
 			},
@@ -111,7 +118,8 @@ export default class CopyousExtension extends Extension {
 		this.notificationManager = new NotificationManager(this);
 		tryCreateSoundManager(this)
 			.then((soundManager) => {
-				if (soundManager) this.soundManager = soundManager;
+				if (this.lifecycle !== lifecycle) soundManager?.destroy();
+				else if (soundManager) this.soundManager = soundManager;
 			})
 			.catch(error);
 
@@ -148,7 +156,7 @@ export default class CopyousExtension extends Extension {
 				this.clipboardDialog?.addEntry(entry);
 				this.indicator?.showEntry(entry);
 				this.indicator?.animate();
-				this.notificationManager?.notification(entry);
+				this.notificationManager?.notification(entry).catch(error);
 				this.soundManager?.playSound();
 			},
 			'text',
@@ -170,112 +178,105 @@ export default class CopyousExtension extends Extension {
 	}
 
 	private async initHljs() {
-		if (this.hljs) return;
-
-		const hljsPath = getHljsPath(this);
+		const lifecycle = this.lifecycle;
 		try {
-			const hljs = (await import(hljsPath.get_uri())) as { default: HLJSApi };
-			this.hljs = hljs.default;
-
-			// Disable file monitor
-			this.hljsMonitor?.cancel();
-			this.hljsMonitor = undefined;
-
-			// Initialize extra languages
-			await this.loadHljsLanguages();
-
-			// Notify dependents
+			this.processor ??= new WorkerClient(`${this.path}/worker.js`, 2000);
+			const languages = await this.processor?.request<Language[]>('configure', {
+				path: getHljsPath(this).get_uri(),
+				languages: getHljsLanguages(this).map(([name, , , path]) => [name, path.get_uri()]),
+			});
+			if (lifecycle !== this.lifecycle) return;
+			this.languages = languages ?? [];
 			this.hljsCallbacks?.forEach((fn) => fn());
-			this.hljsCallbacks = undefined;
 		} catch {
-			this.hljs = null;
-
-			// Automatically load highlight.js
-			if (!this.hljsMonitor) {
-				this.hljsMonitor = hljsPath.monitor(Gio.FileMonitorFlags.NONE, null);
-				this.hljsMonitor.connectObject(
-					'changed',
-					async (_monitor: unknown, _file: unknown, _otherFile: unknown, eventType: Gio.FileMonitorEvent) => {
-						if (eventType === Gio.FileMonitorEvent.CHANGES_DONE_HINT) {
-							await this.initHljs();
-						}
-					},
-					this,
-				);
-			}
+			/* Plain text remains available if the optional highlighter fails. */
 		}
-	}
-
-	private async loadHljsLanguages() {
-		this.hljsLanguages ??= new Map<string, boolean>();
-
-		if (!this.hljsMonitor) {
-			const path = getDataPath(this).get_child('languages');
-			this.hljsMonitor = path.monitor_directory(Gio.FileMonitorFlags.NONE, null);
-			this.hljsMonitor.connectObject(
+		if (lifecycle !== this.lifecycle || this.hljsMonitors.length) return;
+		for (const file of [getHljsPath(this), getDataPath(this).get_child('languages')]) {
+			const monitor = file.monitor(Gio.FileMonitorFlags.NONE, null);
+			monitor.connectObject(
 				'changed',
-				async (_monitor: unknown, _file: unknown, _otherFile: unknown, eventType: Gio.FileMonitorEvent) => {
-					if (
-						eventType === Gio.FileMonitorEvent.CHANGES_DONE_HINT ||
-						eventType === Gio.FileMonitorEvent.DELETED
-					) {
-						await this.loadHljsLanguages();
+				(_monitor: unknown, _file: unknown, _other: unknown, event: Gio.FileMonitorEvent) => {
+					if (event === Gio.FileMonitorEvent.CHANGES_DONE_HINT || event === Gio.FileMonitorEvent.DELETED) {
+						this.initHljs().catch(() => {});
 					}
 				},
 				this,
 			);
+			this.hljsMonitors.push(monitor);
 		}
-
-		const languages = getHljsLanguages(this);
-		await Promise.all(
-			languages.map(async ([name, _language, _hash, path]) => {
-				const enabled = this.hljsLanguages?.get(name) ?? false;
-
-				if (!path.query_exists(null)) {
-					if (enabled) {
-						this.hljs?.unregisterLanguage(name);
-						this.hljsLanguages?.set(name, false);
-					}
-					return;
-				}
-
-				if (enabled) return;
-
-				try {
-					const language = (await import(path.get_uri())) as { default: LanguageFn };
-					this.hljs?.registerLanguage(name, language.default);
-					this.hljsLanguages?.set(name, true);
-				} catch {
-					this.logger.error(`Failed to register language "${name}"`);
-				}
-			}),
-		);
 	}
 
-	public connectHljsInit(fn: () => void) {
-		if (this.hljs != null) return;
+	public async highlight(
+		text: string,
+		language: string | null = null,
+		cancellable?: Gio.Cancellable,
+	): Promise<HighlightResult | null> {
+		if (!this.settings || cancellable?.is_cancelled()) return null;
+		if (!this.processor) {
+			if (GLib.get_monotonic_time() < this.processorRetryAt) return null;
+			await this.initHljs();
+		}
+		const processor = this.processor;
+		try {
+			return (
+				(await processor?.request<HighlightResult | null>('highlight', { text, language }, cancellable)) ?? null
+			);
+		} catch {
+			if (!cancellable?.is_cancelled() && this.processor === processor) {
+				processor?.destroy();
+				this.processor = undefined;
+				this.processorRetryAt = GLib.get_monotonic_time() + 30000000;
+			}
+			return null;
+		}
+	}
 
-		this.hljsCallbacks ??= [];
-		this.hljsCallbacks.push(fn);
+	public connectHljsInit(fn: () => void): () => void {
+		this.hljsCallbacks ??= new Set();
+		const callbacks = this.hljsCallbacks;
+		callbacks.add(fn);
+		return () => {
+			callbacks.delete(fn);
+		};
 	}
 
 	private async initEntryTracker() {
 		if (!this.entryTracker || !this.entryTracker.shouldInit) return;
+		const tracker = this.entryTracker;
+		const generation = ++this.entryLoadGeneration;
+		if (this.entryLoadId) GLib.source_remove(this.entryLoadId);
+		this.entryLoadId = 0;
 
 		this.clipboardDialog?.clearEntries();
-		const entries = await this.entryTracker.init();
-		for (const entry of entries) {
-			this.clipboardDialog?.addEntry(entry);
-		}
+		await this.databaseShutdown;
+		if (generation !== this.entryLoadGeneration) return;
+		const entries = await tracker.init();
+		if (generation !== this.entryLoadGeneration || tracker !== this.entryTracker) return;
+		let index = 0;
+		this.entryLoadId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+			const deadline = GLib.get_monotonic_time() + 4000;
+			do {
+				const entry = entries[index++];
+				if (entry && tracker.has(entry)) this.clipboardDialog?.addEntry(entry);
+			} while (index < entries.length && GLib.get_monotonic_time() < deadline);
+			if (index < entries.length) return GLib.SOURCE_CONTINUE;
+			this.entryLoadId = 0;
+			return GLib.SOURCE_REMOVE;
+		});
 	}
 
 	private async initHistoryTimeout() {
+		const lifecycle = this.lifecycle;
+		const generation = ++this.historyGeneration;
 		if (this.historyTimeoutId >= 0) GLib.source_remove(this.historyTimeoutId);
+		this.historyTimeoutId = -1;
 
 		const historyTime = this.settings?.get_int('history-time');
 		if (historyTime === undefined || historyTime === 0) return;
 
 		await this.entryTracker?.deleteOldest();
+		if (lifecycle !== this.lifecycle || generation !== this.historyGeneration) return;
 		this.historyTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 60, () => {
 			// Do not update the history if the dialog is open
 			this.updateHistory = this.clipboardDialog?.opened ?? false;
@@ -290,6 +291,10 @@ export default class CopyousExtension extends Extension {
 	}
 
 	override disable() {
+		this.lifecycle++;
+		this.entryLoadGeneration++;
+		if (this.entryLoadId) GLib.source_remove(this.entryLoadId);
+		this.entryLoadId = 0;
 		// UI
 		this.clipboardDialog?.disconnectObject(this);
 		this.clipboardDialog?.destroy();
@@ -299,11 +304,15 @@ export default class CopyousExtension extends Extension {
 		this.indicator = undefined;
 
 		// Highlight.js
-		this.hljs = undefined;
-		this.hljsMonitor?.disconnectObject(this);
-		this.hljsMonitor?.cancel();
-		this.hljsMonitor = undefined;
-		this.hljsLanguages = undefined;
+		this.processor?.destroy();
+		this.processor = undefined;
+		this.languages = [];
+		for (const monitor of this.hljsMonitors) {
+			monitor.disconnectObject(this);
+			monitor.cancel();
+		}
+		this.hljsMonitors = [];
+		this.processorRetryAt = 0;
 		this.hljsCallbacks = undefined;
 
 		// Theme
@@ -316,6 +325,7 @@ export default class CopyousExtension extends Extension {
 		this.dbus = undefined;
 
 		// Feedback
+		this.notificationManager?.destroy();
 		this.notificationManager = undefined;
 		this.soundManager?.destroy();
 		this.soundManager = undefined;
@@ -327,7 +337,7 @@ export default class CopyousExtension extends Extension {
 
 		// Database
 		const error = this.logger.error.bind(this.logger);
-		this.entryTracker?.destroy().catch(error);
+		this.databaseShutdown = this.entryTracker?.destroy().catch(error) ?? Promise.resolve();
 		this.entryTracker = undefined;
 
 		if (this.historyTimeoutId >= 0) GLib.source_remove(this.historyTimeoutId);

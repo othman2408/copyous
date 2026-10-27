@@ -4,7 +4,7 @@ import St from 'gi://St';
 
 import type CopyousExtension from '../../extension.js';
 import { enumParamSpec, registerClass } from '../common/gjs.js';
-import { get_first_visible_child, get_last_visible_child } from '../misc/actor.js';
+import type { ClipboardEntry } from '../database/database.js';
 import { ClipboardScrollContainer } from './clipboardScrollContainer.js';
 import { ClipboardItem } from './items/clipboardItem.js';
 import { SearchQuery } from './searchEntry.js';
@@ -43,6 +43,8 @@ export class ClipboardScrollView extends St.ScrollView {
 			}),
 		});
 
+		this.connect('destroy', () => this.cleanupClipboardScrollView());
+
 		this._scrollContainer = new ClipboardScrollContainer(ext);
 		this.set_child(this._scrollContainer);
 
@@ -78,8 +80,8 @@ export class ClipboardScrollView extends St.ScrollView {
 		this.updateScrollbar();
 	}
 
-	public addItem(item: ClipboardItem) {
-		this._scrollContainer.addItem(item);
+	public addEntry(entry: ClipboardEntry, create: () => ClipboardItem | null) {
+		this._scrollContainer.addEntry(entry, create);
 	}
 
 	public clearItems() {
@@ -139,19 +141,13 @@ export class ClipboardScrollView extends St.ScrollView {
 
 		// Home
 		if (key === Clutter.KEY_Home) {
-			const child = get_first_visible_child(this._scrollContainer);
-			if (child) {
-				this._scrollContainer.focusChild(child);
-			}
+			this._scrollContainer.selectItem(0);
 			return Clutter.EVENT_STOP;
 		}
 
 		// End
 		if (key === Clutter.KEY_End) {
-			const child = get_last_visible_child(this._scrollContainer);
-			if (child) {
-				this._scrollContainer.focusChild(child);
-			}
+			this._scrollContainer.selectLast();
 			return Clutter.EVENT_STOP;
 		}
 
@@ -196,7 +192,11 @@ export class ClipboardScrollView extends St.ScrollView {
 			start = adjustment.value;
 		}
 
-		const value = Math.clamp(start + delta * step, adjustment.lower, adjustment.upper);
+		const value = Math.clamp(
+			start + delta * step,
+			adjustment.lower,
+			Math.max(adjustment.lower, adjustment.upper - adjustment.page_size),
+		);
 
 		if (value === adjustment.value) return Clutter.EVENT_STOP;
 
@@ -212,9 +212,7 @@ export class ClipboardScrollView extends St.ScrollView {
 		return Clutter.EVENT_STOP;
 	}
 
-	override destroy() {
+	private cleanupClipboardScrollView(): void {
 		this.ext.settings.disconnectObject(this);
-
-		super.destroy();
 	}
 }

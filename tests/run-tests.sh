@@ -34,7 +34,7 @@ for test in "${tests[@]}"; do
 	test_name=${test_name%.js}
 	output="$OUTPUT_DIR/$test_name.json"
 
-	if dbus-run-session -- gnome-shell-test-tool --devkit --extension "$DIST_ZIP" "$test" --perf-output "$output"; then
+	if dbus-run-session -- gnome-shell-test-tool "${COPYOUS_TEST_MODE:---headless}" --test-iters "${COPYOUS_TEST_ITERS:-1}" --extension "$DIST_ZIP" "$test" --perf-output "$output"; then
 		successful_tests+=("$test_name")
 	else
 		status=1

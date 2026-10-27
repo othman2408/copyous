@@ -12,18 +12,11 @@ import type CopyousExtension from '../../extension.js';
 import { ItemType, ItemTypes, Tag, Tags } from '../common/constants.js';
 import { enumParamSpec, registerClass } from '../common/gjs.js';
 import { Icon, loadIcon } from '../common/icons.js';
+import { localeContains } from '../common/search.js';
 import { ClipboardEntry } from '../database/database.js';
 import { ButtonMask } from '../misc/compatibility.js';
 import { Shortcut } from '../misc/shortcuts.js';
 import { TagsItem } from './components/tagsItem.js';
-
-function localeContains(collator: Intl.Collator, text: string, query: string): boolean {
-	for (let offset = 0; offset <= text.length - query.length; offset++) {
-		const comparison = collator.compare(text.substring(offset, offset + query.length), query);
-		if (comparison === 0) return true;
-	}
-	return false;
-}
 
 export const SearchChange = {
 	Same: 0,
@@ -57,6 +50,18 @@ export class SearchQuery extends GObject.Object {
 		private readonly collator: Intl.Collator,
 	) {
 		super();
+	}
+
+	public toData() {
+		return {
+			query: this.query,
+			pinned: this.pinned,
+			excludePinned: this.excludePinned,
+			tag: this.tag,
+			excludeTagged: this.excludeTagged,
+			type: this.type,
+			locale: this.collator.resolvedOptions().locale,
+		};
 	}
 
 	public matchesPinned(pinned: boolean): boolean {
@@ -262,6 +267,7 @@ class ItemPopupMenu extends PopupMenu.PopupMenu<ItemPopupMenuSignals> {
 })
 export class SearchEntry extends St.Entry {
 	private _collator: Intl.Collator | undefined = new Intl.Collator(undefined, { sensitivity: 'base' });
+	private _disposing = false;
 
 	private _prevSearch: SearchQuery | null = null;
 	private _pinned: boolean = false;
@@ -280,6 +286,8 @@ export class SearchEntry extends St.Entry {
 			x_align: Clutter.ActorAlign.CENTER,
 			x_expand: true,
 		});
+
+		this.connect('destroy', () => this.cleanupSearchEntry());
 
 		this._icons = {
 			search: loadIcon(ext, Icon.Search),
@@ -329,6 +337,9 @@ export class SearchEntry extends St.Entry {
 		);
 
 		// Menu
+		this._itemButton.connect('destroy', () => {
+			this._disposing = true;
+		});
 		this._menu = new ItemPopupMenu(this._itemButton, 0.5, St.Side.TOP);
 
 		const menuManager = new PopupMenu.PopupMenuManager(this);
@@ -613,7 +624,7 @@ export class SearchEntry extends St.Entry {
 	override vfunc_unmap(): void {
 		super.vfunc_unmap();
 
-		if (!this.ext.settings.get_boolean('remember-search')) {
+		if (!this._disposing && !this.ext.settings.get_boolean('remember-search')) {
 			this.text = '';
 			this.pinned = false;
 			this.tag = null;
@@ -621,11 +632,10 @@ export class SearchEntry extends St.Entry {
 		}
 	}
 
-	override destroy() {
+	private cleanupSearchEntry(): void {
+		this._disposing = true;
 		this.ext.settings.disconnectObject(this);
 		this._menu.destroy();
 		this._collator = undefined;
-
-		super.destroy();
 	}
 }

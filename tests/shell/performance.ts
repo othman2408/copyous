@@ -62,6 +62,9 @@ export async function run() {
 	await Scripting.waitLeisure();
 
 	Scripting.scriptEvent('copyousOpenDone');
+
+	extension.clipboardDialog?.close();
+	await Scripting.waitLeisure();
 }
 
 let copyousOpenStart = 0;

@@ -49,6 +49,8 @@ class IncognitoButton extends St.Button {
 	) {
 		super({ ...props, toggle_mode: true, can_focus: true });
 
+		this.connect('destroy', () => this.cleanupIncognitoButton());
+
 		this._incognitoIcon = loadIcon(ext, Icon.Incognito);
 		this._incognitoDisabledIcon = loadIcon(ext, Icon.IncognitoDisabled);
 
@@ -63,9 +65,8 @@ class IncognitoButton extends St.Button {
 		this.update();
 	}
 
-	override destroy() {
+	private cleanupIncognitoButton(): void {
 		this.ext.settings.disconnectObject(this);
-		super.destroy();
 	}
 
 	private update() {
@@ -101,6 +102,8 @@ class ClipboardDialogHeader extends St.Widget {
 			clip_to_allocation: true,
 			x_expand: true,
 		});
+
+		this.connect('destroy', () => this.cleanupClipboardDialogHeader());
 
 		this._headerLayout = new CollapsibleHeaderLayout();
 		this.layout_manager = this._headerLayout;
@@ -144,9 +147,8 @@ class ClipboardDialogHeader extends St.Widget {
 		this.updateHeader(!this.ext.settings.get_boolean('auto-hide-search'), false);
 	}
 
-	override destroy() {
+	private cleanupClipboardDialogHeader(): void {
 		this.ext.settings.disconnectObject(this);
-		super.destroy();
 	}
 
 	get headerVisible() {
@@ -286,6 +288,8 @@ export class ClipboardDialog extends St.Widget {
 			reactive: true,
 		});
 
+		this.connect('destroy', () => this.cleanupClipboardDialog());
+
 		this._monitorConstraint = new Layout.MonitorConstraint({ workArea: true });
 		this.add_constraint(this._monitorConstraint);
 
@@ -398,12 +402,24 @@ export class ClipboardDialog extends St.Widget {
 		this._scrollView.search(this._header.searchEntry.searchQuery);
 	}
 
-	override destroy() {
+	override destroy(): void {
+		// Unmap while the search entry's children are still alive.
+		this.hide();
+		super.destroy();
+	}
+
+	private cleanupClipboardDialog(): void {
+		this._dialog.remove_all_transitions();
+		if (this._grab) {
+			Main.popModal(this._grab);
+			this._grab = null;
+			global.compositor.enable_unredirect();
+		}
+		this._clipboardItemMenu.destroy();
+		global.focus_manager.remove_group(this._dialog);
 		(Main.inputMethod as Clutter.InputMethod).disconnectObject(this);
 		this._ibusManager.disconnectObject(this);
 		this.ext.settings.disconnectObject(this);
-
-		super.destroy();
 	}
 
 	get opened(): boolean {
@@ -537,6 +553,10 @@ export class ClipboardDialog extends St.Widget {
 	}
 
 	public addEntry(entry: ClipboardEntry): void {
+		this._scrollView.addEntry(entry, () => this.createItem(entry));
+	}
+
+	private createItem(entry: ClipboardEntry) {
 		let item;
 		try {
 			item = (() => {
@@ -564,11 +584,11 @@ export class ClipboardDialog extends St.Widget {
 
 			if (!item) {
 				this.ext.logger.error('Unknown item type', entry);
-				return;
+				return null;
 			}
 		} catch (e) {
 			this.ext.logger.error(e);
-			return;
+			return null;
 		}
 
 		// Connect edit
@@ -579,10 +599,16 @@ export class ClipboardDialog extends St.Widget {
 			'open-menu',
 			(_: unknown, x: number, y: number, w: number, h: number) => {
 				// Connect the menu signal to update the hover state of the item and remove the signal when the menu is closed
-				const signalId = this._clipboardItemMenu.connect('open-state-changed', (_menu, state: boolean) => {
+				let signalId = this._clipboardItemMenu.connect('open-state-changed', (_menu, state: boolean) => {
 					item.sync_hover();
-					if (!state) this._clipboardItemMenu.disconnect(signalId);
+					if (!state) {
+						this._clipboardItemMenu.disconnect(signalId);
+						signalId = 0;
+					}
 					return true;
+				});
+				item.connect('destroy', () => {
+					if (signalId) this._clipboardItemMenu.disconnect(signalId);
 				});
 
 				this._clipboardItemMenu.arrowAlignment = w === 0 && h === 0 ? 0 : 0.5;
@@ -625,7 +651,7 @@ export class ClipboardDialog extends St.Widget {
 			this,
 		);
 
-		this._scrollView.addItem(item);
+		return item;
 	}
 
 	public dialogShortcut() {

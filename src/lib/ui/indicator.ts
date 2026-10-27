@@ -180,7 +180,7 @@ export class ClipboardIndicator extends PanelMenu.Button {
 			case ItemType.Code:
 			case ItemType.Link:
 			case ItemType.Character:
-				this.showText(entry.content.split('\n')[0] ?? '');
+				this.showText(entry.content.slice(0, 256).split('\n')[0] ?? '');
 				break;
 			case ItemType.Image:
 				this.showImageFile(Gio.File.new_for_uri(entry.content));
@@ -212,7 +212,7 @@ export class ClipboardIndicator extends PanelMenu.Button {
 		const label = new St.Label({
 			style_class: 'indicator-label',
 			y_align: Clutter.ActorAlign.CENTER,
-			text,
+			text: start ? text.slice(-256) : text.slice(0, 256),
 		});
 		label.clutter_text.ellipsize = start ? Pango.EllipsizeMode.START : Pango.EllipsizeMode.END;
 		this.previewWidget = label;

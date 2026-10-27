@@ -16,6 +16,7 @@ DATABASE := $(DIST_PATH)/database/test.db
 
 SRC = $(shell find $(SRC_DIR) -name '*.ts')
 TESTS = $(shell find $(TESTS_DIR) -name '*.ts')
+SHELL_TEST_JS := $(wildcard tests/shell/*.js)
 
 # Load variables in .env file
 ifneq ($(RELEASE), 1)
@@ -39,7 +40,7 @@ endif
 .PHONY: pot po check-pot check-po
 .PHONY: build install uninstall
 .PHONY: launch launch-profile launch-settings
-.PHONY: test
+.PHONY: test test-unit
 
 # Default target
 all: $(DIST_ZIP)
@@ -194,6 +195,7 @@ $(DIST_ZIP): $(DIST_DIR)/metadata.json $(TSC) $(CSS) $(SCHEMAS) $(DEBUG_SCHEMAS)
 		--force \
 		--podir=$(PO_PATH) \
 		--extra-source="lib" \
+		--extra-source="worker.js" \
 		--extra-source="thirdparty" \
 		--extra-source=$(ICONS_PATH) \
 		--extra-source="resources.gresource" \
@@ -251,5 +253,12 @@ launch-settings: install
 $(DIST_DIR)/tests.tsbuildinfo: $(TESTS) tsconfig.json tsconfig.tests.json | $(DIST_DIR)
 	pnpm exec tsc -p ./tsconfig.tests.json
 
-test: $(DIST_DIR)/tests.tsbuildinfo $(DIST_ZIP) database
-	./tests/run-tests.sh
+test-unit: $(TSC)
+	node --test tests/unit/*.test.mjs
+	gjs -m tests/runtime/performance.js
+	gjs -m tests/runtime/sqlite.js
+	gjs -m tests/runtime/worker.js
+
+test: $(DIST_DIR)/tests.tsbuildinfo $(DIST_ZIP) database test-unit
+	cp $(SHELL_TEST_JS) $(DIST_DIR)/tests/shell/
+	bash ./tests/run-tests.sh
