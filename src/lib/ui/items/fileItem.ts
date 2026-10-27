@@ -69,7 +69,6 @@ export class FileItem extends ClipboardItem {
 		this._file.clutter_text.ellipsize = Pango.EllipsizeMode.MIDDLE;
 		this._content.add_child(this._file);
 
-		// Bind properties
 		this.fileItemSettings.connectObject('changed', this.updateFilePreview.bind(this), this);
 		const logger = this.ext.logger;
 		this.updateFilePreview().catch(logger.error.bind(logger));
@@ -175,7 +174,6 @@ export class FileItem extends ClipboardItem {
 				if (this._filePreview instanceof TextPreview) {
 					this.ext.settings.connectObject('changed::tab-width', this.configureFilePreview.bind(this), this);
 				} else if (this._filePreview instanceof ImagePreview) {
-					// Hover effect
 					this.bind_property('active', this._filePreview, 'active', GObject.BindingFlags.DEFAULT);
 				}
 			}
@@ -213,7 +211,6 @@ export class FileItem extends ClipboardItem {
 	}
 
 	private configureVisibility() {
-		// File preview
 		const showFilePreview = this.showFilePreview();
 		if (this._filePreview && showFilePreview) {
 			this._file.y_expand = false;
@@ -229,7 +226,6 @@ export class FileItem extends ClipboardItem {
 			}
 		}
 
-		// File info
 		if (this._fileInfo != null) {
 			if (
 				this._filePreviewVisibility !== FilePreviewVisibility.Hidden &&

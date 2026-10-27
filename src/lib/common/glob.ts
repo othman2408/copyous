@@ -1,8 +1,3 @@
-/**
- * Converts a glob pattern to a regular expression.
- * @param patterns The glob patterns.
- * @returns The regular expression.
- */
 export function globToRegex(...patterns: string[]): string {
 	return patterns.flatMap(expandBraces).map(translate).join('|');
 }

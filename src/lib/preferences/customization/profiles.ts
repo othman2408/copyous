@@ -233,12 +233,10 @@ export class Profiles extends Adw.PreferencesGroup {
 		const defaultProfile = new DefaultProfile(prefs);
 		const compactProfile = new CompactProfile(prefs);
 
-		// Set current active profile
 		if (defaultProfile.active) toggles.set_active_name('default');
 		else if (compactProfile.active) toggles.set_active_name('compact');
 		else toggles.set_active_name('custom');
 
-		// Update active profile
 		toggles.connect('notify::active-name', () => {
 			if (toggles.active_name === 'default' && !defaultProfile.active) {
 				defaultProfile.activate();
@@ -247,7 +245,6 @@ export class Profiles extends Adw.PreferencesGroup {
 			}
 		});
 
-		// Check if profile is active
 		defaultProfile.connectActive(() => {
 			if (defaultProfile.active) {
 				toggles.set_active_name('default');

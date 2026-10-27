@@ -28,7 +28,6 @@ export class CharacterItemCustomization extends Adw.ExpanderRow {
 		});
 		this.add_row(showUnicode);
 
-		// Bind properties
 		const settings = prefs.getSettings().get_child('character-item');
 		settings.bind('max-characters', maxCharacters, 'value', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('show-unicode', showUnicode, 'active', Gio.SettingsBindFlags.DEFAULT);

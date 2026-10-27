@@ -37,7 +37,6 @@ export class ActionSubmenuDialog extends Adw.AlertDialog {
 		this.set_response_appearance(suggestedId, Adw.ResponseAppearance.SUGGESTED);
 		this.set_response_enabled(suggestedId, false);
 
-		// Form
 		const box = new Gtk.ListBox({
 			css_classes: ['boxed-list'],
 			selection_mode: Gtk.SelectionMode.NONE,
@@ -47,7 +46,6 @@ export class ActionSubmenuDialog extends Adw.AlertDialog {
 		this._nameRow = new Adw.EntryRow({ title: _('Name'), text: actionSubmenu.name });
 		box.append(this._nameRow);
 
-		// Connect signals
 		this._nameRow.connect('notify::text', this.updateEnabled.bind(this));
 	}
 

@@ -124,7 +124,6 @@ export class ClipboardManager extends GObject.Object {
 		if (!checksum) return;
 		this.prevClipboard = [content.type, checksum];
 
-		// Text
 		if (content.type === ContentType.Text) {
 			this.clipboard.set_text(St.ClipboardType.CLIPBOARD, content.text);
 			if (this.ext.settings.get_boolean('sync-primary')) {
@@ -133,13 +132,11 @@ export class ClipboardManager extends GObject.Object {
 			return;
 		}
 
-		// Image
 		if (content.type === ContentType.Image) {
 			this.clipboard.set_content(St.ClipboardType.CLIPBOARD, content.mimetype, content.data);
 			return;
 		}
 
-		// File
 		if (content.type === ContentType.File) {
 			const s = `${FileOperation.Copy}\n${content.paths.join('\n')}`;
 			const bytes = this.textEncoder!.encode(s);
@@ -237,12 +234,10 @@ export class ClipboardManager extends GObject.Object {
 	}
 
 	private shouldSave(mimeTypes: readonly string[]): boolean {
-		// Mime Type
 		if (MimeTypes.Sensitive.some((value) => mimeTypes.includes(value))) {
 			return false;
 		}
 
-		// WM Class
 		const window = global.display.focus_window;
 		if (window) {
 			const exclusions = this.ext.settings.get_strv('wmclass-exclusions');
@@ -268,7 +263,6 @@ export class ClipboardManager extends GObject.Object {
 		});
 		try {
 			const mimeTypes = selectionSource.get_mimetypes();
-			// Capture the exclusion decision while the copying application still has focus.
 			const save = this.shouldSave(mimeTypes);
 			const content = await this.getContent(selectionSource, mimeTypes, cancellable);
 			if (!content || cancellable.is_cancelled()) return;
@@ -276,7 +270,6 @@ export class ClipboardManager extends GObject.Object {
 			const checksum = contentChecksum(content);
 			if (!checksum) return;
 
-			// Check duplicate
 			if (this.prevClipboard) {
 				const [type, prevChecksum] = this.prevClipboard;
 				if (type === content.type && prevChecksum === checksum) {
@@ -323,7 +316,6 @@ export class ClipboardManager extends GObject.Object {
 			return readBounded(source, 32 * 1024 * 1024, cancellable);
 		}
 
-		// Image
 		const imageMimeType = MimeTypes.Image.find((value) => mimeTypes.includes(value));
 		if (imageMimeType) {
 			const bytes = await getBytes(imageMimeType);
@@ -336,7 +328,6 @@ export class ClipboardManager extends GObject.Object {
 			}
 		}
 
-		// File
 		const fileMimeType = MimeTypes.File.find((value) => mimeTypes.includes(value));
 		if (fileMimeType) {
 			const bytes = await getBytes(fileMimeType);
@@ -357,7 +348,6 @@ export class ClipboardManager extends GObject.Object {
 			}
 		}
 
-		// Text
 		const textMimeType = MimeTypes.Text.find((value) => mimeTypes.includes(value));
 		if (textMimeType) {
 			const bytes = await getBytes(textMimeType);
@@ -379,7 +369,6 @@ export class ClipboardManager extends GObject.Object {
 		if (content.type === ContentType.Text) {
 			const trimmed = content.text.trim();
 
-			// Link
 			try {
 				if (trimmed.startsWith('http') && GLib.uri_is_valid(trimmed, GLib.UriFlags.NONE)) {
 					return [ItemType.Link, content.text, null];
@@ -388,18 +377,15 @@ export class ClipboardManager extends GObject.Object {
 				// Ignore
 			}
 
-			// Character
 			const maxCharacters = this.ext.settings.get_child('character-item').get_int('max-characters');
 			if (!this.hasMoreGraphemes(trimmed, maxCharacters)) {
 				return [ItemType.Character, content.text, null];
 			}
 
-			// Color
 			if (Color.parse(trimmed)) {
 				return [ItemType.Color, content.text, null];
 			}
 
-			// Code
 			const slice = previewText(trimmed);
 			const n = Math.max(1, slice.length / 100);
 			const highlightResult = await this.ext.highlight(slice, null, cancellable);
@@ -412,11 +398,9 @@ export class ClipboardManager extends GObject.Object {
 				return [ItemType.Code, content.text, metadata];
 			}
 
-			// Text
 			return [ItemType.Text, content.text, null];
 		}
 
-		// Image
 		if (content.type === ContentType.Image) {
 			try {
 				const path = getImagesPath(this.ext);
@@ -440,7 +424,6 @@ export class ClipboardManager extends GObject.Object {
 			}
 		}
 
-		// File
 		if (content.type === ContentType.File) {
 			const metadata = { operation: content.operation };
 			if (content.paths.length === 1) {

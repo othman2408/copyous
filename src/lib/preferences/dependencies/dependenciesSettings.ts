@@ -182,7 +182,6 @@ class LanguageWidget extends Gtk.ListBox {
 
 		this.updateVisibility();
 
-		// Cancel connections
 		this.connect('destroy', () => this._cancellable.forEach((c) => c.cancel()));
 	}
 
@@ -219,7 +218,6 @@ class LanguageWidget extends Gtk.ListBox {
 		this.updateVisibility();
 
 		if (!this.language.installed) {
-			// Install
 			const cancellable = new Gio.Cancellable();
 			this._cancellable.set(this.language.languageName, cancellable);
 			const success = await downloadHljsLanguage(
@@ -243,7 +241,6 @@ class LanguageWidget extends Gtk.ListBox {
 				}),
 			);
 		} else {
-			// Uninstall
 			let success = false;
 			try {
 				await this.language.file.delete_async(GLib.PRIORITY_DEFAULT, null);
@@ -292,7 +289,6 @@ class HighlightJsPage extends Adw.NavigationPage {
 		toolbarView.add_top_bar(new Adw.HeaderBar());
 		this.child = toolbarView;
 
-		// Content
 		this._page = new Adw.PreferencesPage();
 		toolbarView.content = this._page;
 
@@ -313,7 +309,6 @@ class HighlightJsPage extends Adw.NavigationPage {
 
 		this._filter = new LanguageFilter();
 
-		// Search
 		const suffix = new Gtk.Box({ spacing: 6 });
 		languagesGroup.set_header_suffix(suffix);
 

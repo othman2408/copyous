@@ -66,18 +66,15 @@ class QrCode extends St.DrawingArea {
 	}
 
 	async copy() {
-		// Draw QR code with border
 		const size = this._qrCode.size * 8 + 32;
 		const surface = new Cairo.ImageSurface(Cairo.Format.ARGB32, size, size);
 		const cr = new Cairo.Context(surface);
 		this.draw(cr, size, size, 16);
 		cr.$dispose();
 
-		// Create intermediate file for copying
 		const [tmp] = Gio.file_new_tmp(null);
 		surface.writeToPNG(tmp.get_path()!);
 
-		// Copy to clipboard
 		const [bytes] = await tmp.load_bytes_async(null);
 		const data = bytes.get_data();
 		if (!data) return;
@@ -85,12 +82,10 @@ class QrCode extends St.DrawingArea {
 	}
 
 	private draw(cr: Cairo.Context, width: number, height: number, border: number = 0) {
-		// Background
 		if (border) {
 			// Set antialiasing for rounded corners
 			cr.setAntialias(Cairo.Antialias.BEST);
 
-			// Draw rounded rectangle
 			cr.newSubPath();
 			cr.arc(border, border, border, Math.PI, Math.PI * 1.5);
 			cr.arc(width - border, border, border, Math.PI * 1.5, 0);
@@ -107,7 +102,6 @@ class QrCode extends St.DrawingArea {
 
 		cr.setAntialias(Cairo.Antialias.NONE);
 
-		// Qr Code
 		const qrSize = this._qrCode.size;
 		const cellSize = (width - 2 * border) / qrSize;
 		for (let y = 0; y < qrSize; y++) {

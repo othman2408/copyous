@@ -5,9 +5,6 @@ import { ItemType } from '../common/constants.js';
 import { ClipboardHistory } from '../common/settings.js';
 import { ClipboardEntry, Database, Metadata } from './database.js';
 
-/**
- * In memory database
- */
 export class MemoryDatabase implements Database {
 	protected _entries: Map<string, ClipboardEntry> = new Map();
 	protected _keys: Map<number, string> = new Map();

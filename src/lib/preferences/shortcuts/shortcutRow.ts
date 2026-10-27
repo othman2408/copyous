@@ -80,7 +80,6 @@ class ShortcutDialog extends Adw.Dialog {
 			content_height: 300,
 		});
 
-		// Setup event interruption
 		this._shortcutsInhibited = false;
 
 		this._controller = new Gtk.EventControllerKey({
@@ -91,7 +90,6 @@ class ShortcutDialog extends Adw.Dialog {
 			this.keyPressed(keyval, keycode, state),
 		);
 
-		// Set up the dialog
 		const view = new Adw.ToolbarView();
 		view.add_top_bar(new Adw.HeaderBar());
 		this.set_child(view);
@@ -139,13 +137,11 @@ class ShortcutDialog extends Adw.Dialog {
 		const mask = state & Gtk.accelerator_get_default_mod_mask() & ~Gdk.ModifierType.LOCK_MASK;
 
 		if (mask === 0) {
-			// Cancel
 			if (keyval === Gdk.KEY_Escape) {
 				this.close();
 				return Gdk.EVENT_STOP;
 			}
 
-			// Disable shortcut
 			if (keyval === Gdk.KEY_BackSpace) {
 				this.emit('shortcut-entered', '');
 				this.close();
@@ -173,7 +169,6 @@ class ShortcutDialog extends Adw.Dialog {
 			return;
 		}
 
-		// Disable global shortcuts
 		const surface = this.get_native()?.get_surface();
 		if (surface instanceof Gdk.Toplevel) {
 			surface.inhibit_system_shortcuts(null);
@@ -188,7 +183,6 @@ class ShortcutDialog extends Adw.Dialog {
 			return;
 		}
 
-		// Re-enable global shortcuts
 		const surface = this.get_native()?.get_surface();
 		if (surface instanceof Gdk.Toplevel) {
 			surface.restore_system_shortcuts();

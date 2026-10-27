@@ -29,7 +29,6 @@ export class DialogShortcuts extends Adw.PreferencesGroup {
 		});
 		this.add(openDialogBehaviour);
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		settings.bind('open-clipboard-dialog-shortcut', openDialog, 'shortcuts', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('toggle-incognito-mode-shortcut', toggleIncognito, 'shortcuts', Gio.SettingsBindFlags.DEFAULT);

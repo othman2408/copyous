@@ -79,7 +79,6 @@ class AppSelectionPopover extends Gtk.Popover {
 		});
 		stack.add_named(placeholder, 'placeholder');
 
-		// Bind model
 		const model = new Gio.ListStore({ item_type: Gio.AppInfo.$gtype });
 		const apps = Gio.AppInfo.get_all()
 			.filter((info) => info.should_show() && 'get_startup_wm_class' in info)
@@ -174,7 +173,6 @@ class WMClassExclusionDialog extends Adw.AlertDialog {
 		this.set_response_appearance('add', Adw.ResponseAppearance.SUGGESTED);
 		this.set_response_enabled('add', false);
 
-		// Entry
 		const list = new Gtk.ListBox({ css_classes: ['boxed-list'], selection_mode: Gtk.SelectionMode.NONE });
 		this.extra_child = list;
 
@@ -260,7 +258,6 @@ class AppExclusionsGroup extends Adw.PreferencesGroup {
 			}),
 		);
 
-		// Dialog
 		addExclusion.connect('clicked', async () => {
 			const addExclusionDialog = new WMClassExclusionDialog();
 			const response = await addExclusionDialog.choose(window, null);
@@ -300,11 +297,9 @@ export class AppExclusionsPage extends Adw.NavigationPage {
 		const page = new Adw.PreferencesPage();
 		toolbarView.content = page;
 
-		// App Exclusions
 		const wmClassExclusionsGroup = new AppExclusionsGroup(window, _('App Exclusions'));
 		page.add(wmClassExclusionsGroup);
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		settings.bind('wmclass-exclusions', wmClassExclusionsGroup, 'exclusions', Gio.SettingsBindFlags.DEFAULT);
 	}

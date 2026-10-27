@@ -31,7 +31,6 @@ export class TextItemCustomization extends Adw.ExpanderRow {
 		});
 		this.add_row(textCounter);
 
-		// Bind properties
 		const settings = prefs.getSettings().get_child('text-item');
 		settings.bind('show-text-info', showTextInfo, 'active', Gio.SettingsBindFlags.DEFAULT);
 		bind_enum(settings, 'text-count-mode', textCounter, 'selected');

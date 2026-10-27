@@ -40,7 +40,6 @@ export class ItemShortcuts extends Adw.PreferencesGroup {
 		});
 		this.add(middleClickAction);
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		settings.bind('pin-item-shortcut', pinItem, 'shortcuts', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('delete-item-shortcut', deleteItem, 'shortcuts', Gio.SettingsBindFlags.DEFAULT);

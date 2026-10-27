@@ -82,7 +82,6 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 	) {
 		super(actionSubmenu);
 
-		// Nested lists
 		this._actionsList = new NestedListBox();
 		this.add_row(this._actionsList);
 		this._actionsList.listbox.add_css_class('has-placeholder');
@@ -103,12 +102,10 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 		this._addActionButton.connect('activated', this.add.bind(this));
 		this._addActionButtonList.listbox.append(this._addActionButton);
 
-		// Populate actions
 		for (const action of this.actionSubmenu.actions) {
 			this._actionsList.listbox.append(this.createRow(action));
 		}
 
-		// Menu
 		const actionGroup = new Gio.SimpleActionGroup();
 
 		const editAction = Gio.SimpleAction.new('edit', null);
@@ -126,7 +123,6 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 		menu.append(_('Delete'), 'action.delete');
 		this._menuButton.menu_model = menu;
 
-		// Drag and Drop
 		this.configureDragAndDrop();
 	}
 
@@ -188,7 +184,6 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 	}
 
 	private configureDragAndDrop() {
-		// Drag
 		const dropController = new Gtk.DropControllerMotion();
 		const addActionDropController = new Gtk.DropControllerMotion();
 		const dragSource = new Gtk.DragSource({ actions: Gdk.DragAction.MOVE });
@@ -233,7 +228,6 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 			if (deleteData) this.emit('delete');
 		});
 
-		// Update drag
 		let sourceId: number = -1;
 		dropController.connect('enter', () => {
 			(expanderRow.parent as Gtk.ListBox).drag_highlight_row(expanderRow);
@@ -261,7 +255,6 @@ class ActionSubmenuRow extends ActionSubmenuRowBase {
 		);
 		addActionDropController.connect('leave', () => this._addActionButtonList.listbox.drag_unhighlight_row());
 
-		// Drop
 		const dropTarget = Gtk.DropTarget.new(ActionRow.$gtype, Gdk.DragAction.MOVE);
 		this._actionsList.listbox.add_controller(dropTarget);
 
@@ -316,7 +309,6 @@ class ActionRowBase extends Adw.PreferencesRow {
 		});
 		this.child = header;
 
-		// Drag handle
 		const prefixes = new Gtk.Box({ css_classes: ['prefixes'] });
 		header.append(prefixes);
 
@@ -326,7 +318,6 @@ class ActionRowBase extends Adw.PreferencesRow {
 		});
 		prefixes.append(dragHandle);
 
-		// Content
 		const box = new Gtk.Box({
 			orientation: Gtk.Orientation.VERTICAL,
 			valign: Gtk.Align.CENTER,
@@ -338,7 +329,6 @@ class ActionRowBase extends Adw.PreferencesRow {
 		const titleBox = new Gtk.Box();
 		box.append(titleBox);
 
-		// Name
 		this._nameLabel = new Gtk.Label({
 			label: action.name,
 			xalign: 0,
@@ -347,7 +337,6 @@ class ActionRowBase extends Adw.PreferencesRow {
 		});
 		titleBox.append(this._nameLabel);
 
-		// Pattern
 		this._patternLabel = new Gtk.Label({
 			label: action.pattern ?? '',
 			xalign: 0,
@@ -358,7 +347,6 @@ class ActionRowBase extends Adw.PreferencesRow {
 		});
 		titleBox.append(this._patternLabel);
 
-		// Action
 		this._actionLabel = new Gtk.Label({
 			label: instanceofCommandAction(action) ? action.command : '',
 			xalign: 0,
@@ -368,7 +356,6 @@ class ActionRowBase extends Adw.PreferencesRow {
 		});
 		box.append(this._actionLabel);
 
-		// Shortcut
 		this._shortcutLabel = new ShortcutLabel({
 			accelerator: action.shortcut?.[0] ?? '',
 			valign: Gtk.Align.CENTER,
@@ -376,12 +363,10 @@ class ActionRowBase extends Adw.PreferencesRow {
 		});
 		header.append(this._shortcutLabel);
 
-		// Type icons
 		this._typesBox = new TypesBox();
 		this._typesBox.types = action.types ?? [];
 		header.append(this._typesBox);
 
-		// Menu button
 		const suffixes = new Gtk.Box();
 		header.append(suffixes);
 
@@ -406,7 +391,6 @@ class ActionRow extends ActionRowBase {
 	) {
 		super(action);
 
-		// Menu
 		const actionGroup = new Gio.SimpleActionGroup();
 
 		const editAction = Gio.SimpleAction.new('edit', null);
@@ -424,7 +408,6 @@ class ActionRow extends ActionRowBase {
 		menu.append(_('Delete'), 'action.delete');
 		this._menuButton.menu_model = menu;
 
-		// Drag and drop
 		this.configureDragAndDrop();
 	}
 
@@ -460,7 +443,6 @@ class ActionRow extends ActionRowBase {
 		this.add_controller(dropController);
 		this.add_controller(dragSource);
 
-		// Drag
 		let dragX = 0;
 		let dragY = 0;
 		dragSource.connect('prepare', (_source, x, y) => {
@@ -495,7 +477,6 @@ class ActionRow extends ActionRowBase {
 			if (deleteData) this.emit('delete');
 		});
 
-		// Update drag
 		dropController.connect('enter', () => (this.parent as Gtk.ListBox)?.drag_highlight_row(this));
 		dropController.connect('leave', () => (this.parent as Gtk.ListBox)?.drag_unhighlight_row());
 	}
@@ -519,7 +500,6 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 
 		this._actions = actions.filter((a) => instanceofAction(a) || instanceofActionSubmenu(a));
 
-		// List
 		this._listbox = new Gtk.ListBox({
 			css_classes: ['boxed-list', 'has-placeholder'],
 			selection_mode: Gtk.SelectionMode.NONE,
@@ -532,7 +512,6 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 		);
 		this.add(this._listbox);
 
-		// Populate Actions and Submenus
 		const jsobjects = actions.map((a) => new JsObjectWrapper(a));
 		this._model = Gio.ListStore.new(JsObjectWrapper.$gtype) as Gio.ListStore<
 			JsObjectWrapper<Action | ActionSubmenu>
@@ -541,7 +520,6 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 
 		this._listbox.bind_model(this._model, this.createRow.bind(this));
 
-		// Menu
 		const addActionButton = new Gtk.MenuButton({
 			valign: Gtk.Align.CENTER,
 			css_classes: ['flat'],
@@ -569,7 +547,6 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 		menu.append(_('Add Submenu'), 'action-menu.add-sub-menu');
 		addActionButton.menu_model = menu;
 
-		// Drag and drop
 		this.configureDragAndDrop();
 	}
 
@@ -636,7 +613,6 @@ export class ActionsGroup extends Adw.PreferencesGroup {
 	}
 
 	private configureDragAndDrop() {
-		// Drop
 		const dropTarget = Gtk.DropTarget.new(GObject.TYPE_NONE, Gdk.DragAction.MOVE);
 		dropTarget.set_gtypes([ActionRow.$gtype, ActionSubmenuRow.$gtype]);
 		this._listbox.add_controller(dropTarget);

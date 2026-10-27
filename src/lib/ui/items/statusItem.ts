@@ -77,7 +77,6 @@ export class StatusItem extends St.BoxLayout {
 		this._text.clutter_text.line_wrap = true;
 		box.add_child(this._text);
 
-		// Bind properties
 		ext.settings.connectObject(
 			'changed::item-width',
 			this.updateSize.bind(this),

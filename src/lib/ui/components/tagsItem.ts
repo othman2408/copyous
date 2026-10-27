@@ -118,7 +118,6 @@ export class TagsItem extends PopupMenu.PopupBaseMenuItem {
 		});
 		this.track_hover = false;
 
-		// Left arrow
 		this._leftArrow = new St.Button({
 			icon_name: Icon.Left,
 			style_class: 'popup-menu-item arrow-button',
@@ -126,7 +125,6 @@ export class TagsItem extends PopupMenu.PopupBaseMenuItem {
 		});
 		this.actor.add_child(this._leftArrow);
 
-		// Tags
 		const scrollView = new St.ScrollView({
 			style_class: 'tags-scrollview',
 			x_expand: true,
@@ -140,14 +138,12 @@ export class TagsItem extends PopupMenu.PopupBaseMenuItem {
 		this._tagsBox.hadjustment.connect('notify::value', this.updateButtons.bind(this));
 		this._tagsBox.hadjustment.connect('changed', this.updateButtons.bind(this));
 
-		// Right arrow
 		this._rightArrow = new St.Button({
 			icon_name: Icon.Right,
 			style_class: 'popup-menu-item arrow-button',
 		});
 		this.actor.add_child(this._rightArrow);
 
-		// Connect events
 		scrollView.connect('scroll-event', (_actor, event: Clutter.Event) => {
 			if (this._tagsBox.hadjustment.get_transition('value')) return;
 

@@ -49,7 +49,6 @@ export class ImageItem extends ClipboardItem {
 		this._imagePreview = new ImagePreview(ext, file);
 		this._content.add_child(this._imagePreview);
 
-		// Bind properties
 		this.imageItemSettings.connectObject(
 			'changed::show-image-info',
 			this.updateSettings.bind(this),
@@ -60,7 +59,6 @@ export class ImageItem extends ClipboardItem {
 
 		this.updateSettings();
 
-		// Hover effect
 		this.bind_property('active', this._imagePreview, 'active', GObject.BindingFlags.DEFAULT);
 	}
 

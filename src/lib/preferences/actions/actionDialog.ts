@@ -145,7 +145,6 @@ class SelectTypesRow extends Adw.ActionRow {
 		const arrow = new Gtk.Image({ icon_name: Icon.Down, css_classes: ['dropdown-arrow'] });
 		arrowBox.append(arrow);
 
-		// Popover
 		this._popover = new Gtk.Popover({
 			css_classes: ['menu'],
 		});
@@ -170,7 +169,6 @@ class SelectTypesRow extends Adw.ActionRow {
 			this.notify('types');
 		});
 
-		// Items
 		this._typeRows = {
 			[ItemType.Text]: new TypeRow(ItemType.Text, _('Text')),
 			[ItemType.Code]: new TypeRow(ItemType.Code, _('Code')),
@@ -237,14 +235,12 @@ export class ActionDialog extends Adw.AlertDialog {
 		this.set_response_appearance(suggestedId, Adw.ResponseAppearance.SUGGESTED);
 		this.set_response_enabled(suggestedId, false);
 
-		// Content
 		const box = new Gtk.Box({
 			orientation: Gtk.Orientation.VERTICAL,
 			spacing: 20,
 		});
 		this.extra_child = box;
 
-		// Kind Selector
 		if (action === null) {
 			const kindBox = new Gtk.ListBox({
 				css_classes: ['boxed-list'],
@@ -258,7 +254,6 @@ export class ActionDialog extends Adw.AlertDialog {
 			});
 			kindBox.append(kindSelector);
 
-			// Form
 			const stack = new Gtk.Stack({
 				transition_type: Gtk.StackTransitionType.NONE,
 				vhomogeneous: false,
@@ -466,7 +461,6 @@ class CommandActionForm extends Gtk.ListBox implements ActionForm {
 		this._shortcutRow = new ShortcutRow(_('Shortcut'), action?.shortcut?.join(' '), true);
 		this.append(this._shortcutRow);
 
-		// Connect signals
 		this._nameRow.connect('notify::text', () => this.notify('valid'));
 		this._commandRow.connect('notify::text', () => this.notify('valid'));
 	}
@@ -557,7 +551,6 @@ class ColorActionForm extends Gtk.ListBox implements ActionForm {
 		this._shortcutRow = new ShortcutRow(_('Shortcut'), action?.shortcut?.join(' '), true);
 		this.append(this._shortcutRow);
 
-		// Connect signals
 		this._nameRow.connect('notify::text', () => this.notify('valid'));
 	}
 
@@ -621,7 +614,6 @@ class QrCodeActionForm extends Gtk.ListBox implements ActionForm {
 		this._shortcutRow = new ShortcutRow(_('Shortcut'), action?.shortcut?.join(' '), true);
 		this.append(this._shortcutRow);
 
-		// Connect signals
 		this._nameRow.connect('notify::text', () => this.notify('valid'));
 	}
 

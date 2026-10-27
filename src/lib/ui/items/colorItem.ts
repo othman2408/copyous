@@ -75,7 +75,6 @@ export class ColorItem extends ClipboardItem {
 		const colorPreview = new ColorPreview(entry.content.trim());
 		this._content.add_child(colorPreview);
 
-		// Hover effect
 		this.connect('notify::active', () => {
 			colorPreview.active = this.active;
 		});

@@ -123,7 +123,6 @@ export class DialogCustomization extends Adw.PreferencesGroup {
 		});
 		this.add(showScrollbar);
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		settings.bind('show-at-pointer', this._showAtPointer, 'active', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('show-at-cursor', this._showAtCursor, 'active', Gio.SettingsBindFlags.DEFAULT);
@@ -161,7 +160,6 @@ export class DialogCustomization extends Adw.PreferencesGroup {
 		makeResettable(bottomMargin, settings, 'clipboard-margin-bottom');
 		makeResettable(leftMargin, settings, 'clipboard-margin-left');
 
-		// Update
 		this.updateShowAtPointer();
 		this.updateOrientation();
 		this.updatePosition();
@@ -177,11 +175,9 @@ export class DialogCustomization extends Adw.PreferencesGroup {
 	private updateOrientation() {
 		const horizontal = this._orientation.selected === 0;
 
-		// Store current
 		const horizontalPosition = this._horizontalPosition.selected;
 		const verticalPosition = this._verticalPosition.selected;
 
-		// Enable/disable fill option depending on orientation
 		const horizontalFill = this._horizontal.get_item(3) !== null;
 		const verticalFill = this._vertical.get_item(3) !== null;
 		if (horizontal) {
@@ -201,7 +197,6 @@ export class DialogCustomization extends Adw.PreferencesGroup {
 			this._verticalPosition.selected = 3;
 		}
 
-		// Update size labels
 		if (horizontal) {
 			this._size.title = _('Width');
 			this._size.subtitle = _('Change the width of the clipboard dialog');

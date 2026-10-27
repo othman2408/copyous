@@ -128,7 +128,6 @@ export class ThemeCustomization extends Adw.PreferencesGroup {
 		});
 		this.add(searchBgColor);
 
-		// Bind properties
 		const settings = (prefs.getSettings() as CopyousSettings).get_child('theme');
 
 		bind_enum(settings, 'theme', theme, 'selected');

@@ -30,7 +30,6 @@ export class ImageItemCustomization extends Adw.ExpanderRow {
 		});
 		this.add_row(backgroundSize);
 
-		// Bind properties
 		const settings = prefs.getSettings().get_child('image-item');
 		settings.bind('show-image-info', showImageInfo, 'active', Gio.SettingsBindFlags.DEFAULT);
 		bind_enum(settings, 'background-size', backgroundSize, 'selected');

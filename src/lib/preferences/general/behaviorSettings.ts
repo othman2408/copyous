@@ -56,7 +56,6 @@ export class BehaviorSettings extends Adw.PreferencesGroup {
 		});
 		this.add(updateDateOnCopy);
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		settings.bind('remember-search', rememberSearch, 'active', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('exclude-pinned', excludePinned, 'active', Gio.SettingsBindFlags.DEFAULT);

@@ -28,9 +28,6 @@ interface JsonDatabaseModel {
 	entries: JsonClipboardEntry[];
 }
 
-/**
- * In memory database
- */
 export class JsonDatabase extends MemoryDatabase {
 	private _saveTimeoutId: number = -1;
 	private _dirty = false;

@@ -213,10 +213,8 @@ export class LinkPreview extends St.Widget {
 		// Add top padding for when the header is hidden
 		let spacing = this._topPadding ? SPACING : 0;
 
-		// Set minimum height to minimum of url
 		let h = min3 + spacing;
 
-		// Title
 		let h1 = 0;
 		if (this._title.visible) {
 			if (h + nat1 <= height) {
@@ -229,7 +227,6 @@ export class LinkPreview extends St.Widget {
 		this._title.opacity = h1 > 0 ? 255 : 0;
 		h += h1;
 
-		// Description
 		let h2 = 0;
 		if (this._description.visible) {
 			if (vertical && nat0 > 0 && h + min2 <= height) {
@@ -244,7 +241,6 @@ export class LinkPreview extends St.Widget {
 		this._description.opacity = h2 > 0 ? 255 : 0;
 		h += h2;
 
-		// Image
 		let h0 = 0;
 		if (nat0 > 0) {
 			if (!vertical) {
@@ -258,11 +254,9 @@ export class LinkPreview extends St.Widget {
 		if (this._image) this._image.opacity = h0 > 0 ? 255 : 0;
 		if (vertical) h += h0;
 
-		// Url
 		const line3 = min3 - this._url.get_theme_node().get_vertical_padding();
 		const h3 = Math.min(min3 + Math.max(Math.floor((height - h) / line3) * line3, 0), nat3);
 
-		// Allocate
 		this._image?.allocate(Clutter.ActorBox.new(0, 0, imageWidth, h0));
 		let y = vertical ? h0 + spacing : spacing;
 
@@ -319,7 +313,6 @@ export class LinkItem extends ClipboardItem {
 		this._url.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
 		this._content.add_child(this._url);
 
-		// Bind properties
 		this.linkItemSettings.connectObject('changed', this.updateLinkPreview.bind(this), this);
 		this.ext.settings.connectObject('changed::show-header', this.updateLinkPreview.bind(this), this);
 

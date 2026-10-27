@@ -1,4 +1,3 @@
-/** Keep locale-aware matching, with a native substring fast path for ASCII code/logs. */
 export function localeContains(collator: Intl.Collator, text: string, query: string): boolean {
 	if (text.includes(query)) return true;
 	const options = collator.resolvedOptions();

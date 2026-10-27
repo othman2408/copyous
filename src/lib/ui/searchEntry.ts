@@ -146,7 +146,6 @@ class ItemPopupMenu extends PopupMenu.PopupMenu<ItemPopupMenuSignals> {
 
 		this.actor.add_style_class_name('search-popup-menu');
 
-		// Tags
 		this._tagsItem = new TagsItem();
 		this._tagsItem.connect('tag-changed', () => {
 			this.close(BoxPointer.PopupAnimation.FADE);
@@ -154,7 +153,6 @@ class ItemPopupMenu extends PopupMenu.PopupMenu<ItemPopupMenuSignals> {
 		});
 		this.addMenuItem(this._tagsItem);
 
-		// Types
 		this._all = this.addItem(_('__All'), null);
 		this._all.setOrnament(PopupMenu.Ornament.CHECK);
 
@@ -179,7 +177,6 @@ class ItemPopupMenu extends PopupMenu.PopupMenu<ItemPopupMenuSignals> {
 				const unicode = Clutter.keysym_to_unicode(key);
 				if (unicode === 0) return;
 
-				// Select tag with number
 				if (key === Clutter.KEY_0 || key === Clutter.KEY_KP_0) {
 					this._tagsItem.tag = null;
 					this.close(BoxPointer.PopupAnimation.FADE);
@@ -198,7 +195,6 @@ class ItemPopupMenu extends PopupMenu.PopupMenu<ItemPopupMenuSignals> {
 					return;
 				}
 
-				// Activate the item with the mnemonic
 				const char = String.fromCharCode(unicode).toLocaleLowerCase();
 				for (const menuItem of [this._all, ...Object.values(this._options)]) {
 					if (char === menuItem.mnemonic) {
@@ -301,7 +297,6 @@ export class SearchEntry extends St.Entry {
 			[ItemType.Color]: loadIcon(ext, Icon.Color),
 		};
 
-		// Item button
 		const left = new St.BoxLayout();
 		this.primary_icon = left;
 		left.connect('key-press-event', (_btn, event: Clutter.Event) => this._leftKeyPressEvent(event));
@@ -336,7 +331,6 @@ export class SearchEntry extends St.Entry {
 			}),
 		);
 
-		// Menu
 		this._itemButton.connect('destroy', () => {
 			this._disposing = true;
 		});
@@ -360,12 +354,10 @@ export class SearchEntry extends St.Entry {
 			return undefined;
 		});
 
-		// Right
 		const right = new St.BoxLayout();
 		this.secondary_icon = right;
 		right.connect('key-press-event', (_btn, event: Clutter.Event) => this._rightKeyPressEvent(event));
 
-		// Pin button
 		const pinButton = new St.Button({
 			style_class: 'search-entry-button pin-button',
 			toggle_mode: true,
@@ -379,7 +371,6 @@ export class SearchEntry extends St.Entry {
 		});
 		right.add_child(pinButton);
 
-		// Bind properties
 		pinButton.bind_property('checked', this, 'pinned', GObject.BindingFlags.BIDIRECTIONAL);
 
 		this.ext.settings.connectObject(
@@ -390,7 +381,6 @@ export class SearchEntry extends St.Entry {
 			this,
 		);
 
-		// Connect signals
 		this.connect('notify::text', this.search.bind(this));
 		this.clutter_text.connect('key-press-event', (_text, event: Clutter.Event) => this._keyPressEvent(event));
 	}
@@ -439,7 +429,6 @@ export class SearchEntry extends St.Entry {
 		if (!this._prevSearch) {
 			change = SearchChange.Different;
 		} else {
-			// Query
 			let queryChange: SearchChange;
 			if (query === this._prevSearch.query) queryChange = SearchChange.Same;
 			else if (query.includes(this._prevSearch.query)) queryChange = SearchChange.MoreStrict;
@@ -448,7 +437,6 @@ export class SearchEntry extends St.Entry {
 
 			change = queryChange;
 
-			// Pinned
 			const prevUnpinned = this._prevSearch.matchesPinned(false);
 			const prevPinned = this._prevSearch.matchesPinned(true);
 			const unpinned = (!this.pinned && !excludePinned) || !this.pinned;
@@ -464,7 +452,6 @@ export class SearchEntry extends St.Entry {
 				change =
 					change === SearchChange.Same || change === pinnedChange ? pinnedChange : SearchChange.Different;
 
-			// Tagged
 			let taggedChange: SearchChange;
 			if (this._prevSearch.excludeTagged !== excludeTagged) taggedChange = SearchChange.Different;
 			else if (this.tag !== null) {
@@ -481,7 +468,6 @@ export class SearchEntry extends St.Entry {
 				change =
 					change === SearchChange.Same || change === taggedChange ? taggedChange : SearchChange.Different;
 
-			// Type
 			let typeChange: SearchChange;
 			if (this._prevSearch.type === this.type) typeChange = SearchChange.Same;
 			else if (this.type === null) typeChange = SearchChange.LessStrict;
@@ -550,7 +536,6 @@ export class SearchEntry extends St.Entry {
 			return Clutter.EVENT_STOP;
 		}
 
-		// Toggle pinned search
 		if (
 			this.ext.shortcutsManager?.getShortcutForKeyBinding(key, event.get_state()) === Shortcut.TogglePinnedSearch
 		) {
@@ -558,14 +543,12 @@ export class SearchEntry extends St.Entry {
 			return Clutter.EVENT_STOP;
 		}
 
-		// Clear tag/type: backspace
 		if (this.text.length === 0 && key === Clutter.KEY_BackSpace) {
 			this.tag = null;
 			this.type = null;
 			return Clutter.EVENT_STOP;
 		}
 
-		// Submit: Enter
 		if (key === Clutter.KEY_Return || key === Clutter.KEY_KP_Enter) {
 			this.emit('activate');
 			return Clutter.EVENT_STOP;

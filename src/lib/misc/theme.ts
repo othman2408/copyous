@@ -95,16 +95,13 @@ export class ThemeManager extends GObject.Object {
 
 		const colorScheme = (['dark', 'light', 'high-contrast'] as const)[this.colorScheme];
 
-		// Custom Theme
 		if (theme === Theme.Custom) {
 			try {
-				// Load template
 				const uri = `resource:///org/gnome/shell/extensions/copyous/css/template-${colorScheme}.css`;
 				const template = Gio.File.new_for_uri(uri);
 				const [contents] = await template.load_contents_async(null);
 				const text = new TextDecoder().decode(contents);
 
-				// Fill template
 				const css = Object.entries(DefaultColors).reduce((s, [key, colors]) => {
 					const i = Math.min(this.colorScheme, colors.length - 1);
 					let color = this._themeSettings.get_string(key as keyof typeof DefaultColors);
@@ -115,7 +112,6 @@ export class ThemeManager extends GObject.Object {
 					return s.replaceAll(`$${variable}`, color);
 				}, text);
 
-				// Save theme
 				const path = getDataPath(this.ext);
 				const stylesheet = path.get_child('custom-theme.css');
 
@@ -128,7 +124,6 @@ export class ThemeManager extends GObject.Object {
 					null,
 				);
 
-				// Load theme
 				if (this._stylesheet) this.theme.unload_stylesheet(this._stylesheet);
 				this.theme.load_stylesheet(stylesheet);
 				this._stylesheet = stylesheet;
@@ -139,7 +134,6 @@ export class ThemeManager extends GObject.Object {
 			}
 		}
 
-		// GNOME Theme
 		const themeName = (['default', 'yaru'] as const)[theme];
 		const uri = `resource:///org/gnome/shell/extensions/copyous/css/stylesheet-${themeName}-${colorScheme}.css`;
 		const stylesheet = Gio.File.new_for_uri(uri);

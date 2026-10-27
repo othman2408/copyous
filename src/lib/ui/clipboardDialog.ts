@@ -111,7 +111,6 @@ class ClipboardDialogHeader extends St.Widget {
 		this._headerBox = new CenterBox({ style_class: 'dialog-header-box', x_expand: true });
 		this.add_child(this._headerBox);
 
-		// Start
 		this._settingsButton = new St.Button({
 			style_class: 'dialog-header-icon-button',
 			child: new St.Icon({ gicon: loadIcon(ext, Icon.Settings) }),
@@ -137,7 +136,6 @@ class ClipboardDialogHeader extends St.Widget {
 		this._clearButton.connect('clicked', () => this.emit('clear-history'));
 		this._headerBox.addSuffix(this._clearButton);
 
-		// Bind properties
 		this.ext.settings.connectObject(
 			'changed::auto-hide-search',
 			() => this.updateHeader(!this.ext.settings.get_boolean('auto-hide-search'), false),
@@ -295,7 +293,6 @@ export class ClipboardDialog extends St.Widget {
 
 		Main.layoutManager.modalDialogGroup.add_child(this);
 
-		// Dialog
 		this._dialog = new St.BoxLayout({
 			orientation: Clutter.Orientation.VERTICAL,
 			style_class: 'modal-dialog clipboard-dialog horizontal',
@@ -311,7 +308,6 @@ export class ClipboardDialog extends St.Widget {
 
 		global.focus_manager.add_group(this._dialog);
 
-		// Header
 		this._header = new ClipboardDialogHeader(ext);
 		this._dialog.add_child(this._header);
 
@@ -328,7 +324,6 @@ export class ClipboardDialog extends St.Widget {
 			}
 		});
 
-		// Scrollbox
 		this._scrollView = new ClipboardScrollView(ext);
 		this._dialog.add_child(this._scrollView);
 
@@ -339,13 +334,11 @@ export class ClipboardDialog extends St.Widget {
 		});
 		this._header.add_constraint(this._widthConstraint);
 
-		// Footer
 		this._footer = new ClipboardDialogFooter(ext);
 		this._dialog.add_child(this._footer);
 		this._footer.connect('open-settings', this.openSettings.bind(this));
 		this._footer.connect('clear-history', this.confirmClearHistory.bind(this));
 
-		// Clipboard item menu
 		this._clipboardItemMenu = new ClipboardItemMenu(ext);
 		const clipboardItemMenuManager = new PopupMenu.PopupMenuManager(this);
 		clipboardItemMenuManager.addMenu(this._clipboardItemMenu, 0);
@@ -360,7 +353,6 @@ export class ClipboardDialog extends St.Widget {
 			this,
 		);
 
-		// Cursor position
 		(Main.inputMethod as Clutter.InputMethod).connectObject(
 			'cursor-location-changed',
 			this.updateCursor.bind(this),
@@ -381,7 +373,6 @@ export class ClipboardDialog extends St.Widget {
 			this,
 		);
 
-		// Bind properties
 		// prettier-ignore
 		this.ext.settings.connectObject(
 			'changed::show-at-pointer', this.updatePosition.bind(this),
@@ -591,10 +582,8 @@ export class ClipboardDialog extends St.Widget {
 			return null;
 		}
 
-		// Connect edit
 		item.connectObject('edit', () => this._clipboardItemMenu.edit(entry), this);
 
-		// Connect item menu
 		item.connectObject(
 			'open-menu',
 			(_: unknown, x: number, y: number, w: number, h: number) => {
@@ -626,7 +615,6 @@ export class ClipboardDialog extends St.Widget {
 			this,
 		);
 
-		// Connect activation
 		item.connectObject(
 			'activate',
 			() => {
@@ -712,7 +700,6 @@ export class ClipboardDialog extends St.Widget {
 			this._dialog.height = size;
 		}
 
-		// Header / Footer
 		this._header.showButtons = this._orientation === Clutter.Orientation.HORIZONTAL;
 		this._footer.visible = this._orientation === Clutter.Orientation.VERTICAL;
 	}
@@ -735,7 +722,6 @@ export class ClipboardDialog extends St.Widget {
 	}
 
 	private updateFitConstraint() {
-		// Update fit constraint position to current pointer position
 		const showAtPointer = this.ext.settings.get_boolean('show-at-pointer');
 		if (!showAtPointer) return;
 
@@ -764,13 +750,11 @@ export class ClipboardDialog extends St.Widget {
 	override vfunc_key_press_event(event: Clutter.Event): boolean {
 		const key = event.get_key_symbol();
 
-		// Close on escape
 		if (key === Clutter.KEY_Escape) {
 			this.close();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Select item: ctrl + 0..9
 		const isNum = key >= Clutter.KEY_0 && key <= Clutter.KEY_9;
 		if (event.has_control_modifier() && (isNum || (key >= Clutter.KEY_KP_0 && key <= Clutter.KEY_KP_9))) {
 			const i = isNum ? key - Clutter.KEY_1 : key - Clutter.KEY_KP_1;
@@ -781,19 +765,16 @@ export class ClipboardDialog extends St.Widget {
 			return Clutter.EVENT_STOP;
 		}
 
-		// Search on ctrl+f
 		if (event.has_control_modifier() && key === Clutter.KEY_f) {
 			this._header.searchEntry.grab_key_focus();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Trigger search
 		if (!event.has_control_modifier() && this.shouldTriggerSearch(key)) {
 			this._header.searchEntry.clutter_text.grab_key_focus();
 			return this._header.searchEntry.clutter_text.event(event, false);
 		}
 
-		// Toggle pinned search
 		if (
 			this.ext.shortcutsManager?.getShortcutForKeyBinding(key, event.get_state()) === Shortcut.TogglePinnedSearch
 		) {
@@ -801,38 +782,32 @@ export class ClipboardDialog extends St.Widget {
 			return Clutter.EVENT_STOP;
 		}
 
-		// Select tag: ctrl + shift + 0..9
 		const code = event.get_key_code();
 		if (event.has_control_modifier() && event.has_shift_modifier() && code >= 10 && code <= 19) {
 			this._header.searchEntry.selectTag(code - 10);
 			return Clutter.EVENT_STOP;
 		}
 
-		// Next tag: ctrl + `
 		if (event.has_control_modifier() && key === Clutter.KEY_grave) {
 			this._header.searchEntry.nextTag();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Previous tag: ctrl + shift + `
 		if (event.has_control_modifier() && key === Clutter.KEY_asciitilde) {
 			this._header.searchEntry.prevTag();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Next type: ctrl + tab
 		if (event.has_control_modifier() && key === Clutter.KEY_Tab) {
 			this._header.searchEntry.nextType();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Previous type: ctrl + shift + tab
 		if (event.has_control_modifier() && key === Clutter.KEY_ISO_Left_Tab) {
 			this._header.searchEntry.prevType();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Navigate
 		// St.FocusManager.navigate_from_event was removed from St in GNOME 51
 		if (VERSION < 51 && global.focus_manager.navigate_from_event) {
 			if (global.focus_manager.navigate_from_event(event)) return Clutter.EVENT_STOP;
@@ -902,10 +877,8 @@ export class ClipboardDialog extends St.Widget {
 	override vfunc_map(): void {
 		super.vfunc_map();
 
-		// Update fit constraint
 		this.updateFitConstraint();
 
-		// Navigate to first item
 		if (!this._scrollView.navigate_focus(null, St.DirectionType.DOWN, false)) {
 			this._header.updateHeader(true, false);
 			this._header.searchEntry.grab_key_focus();

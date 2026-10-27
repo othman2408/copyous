@@ -196,7 +196,6 @@ export class ActionPopupMenuSection extends PopupMenu.PopupMenuSection<ActionPop
 		const match = matchAction(entry, action)?.map((x) => x ?? '');
 		if (!match) return;
 
-		// Timeout after 30 seconds
 		const token = new Gio.Cancellable();
 		this._tokens.push(token);
 		let timeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_HIGH, 30, () => {
@@ -216,7 +215,6 @@ export class ActionPopupMenuSection extends PopupMenu.PopupMenuSection<ActionPop
 				Gio.SubprocessFlags.STDIN_PIPE | Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE;
 			const process = Gio.Subprocess.new(['sh', '-c', action.command, '_', ...match.slice(1)], flags);
 
-			// Wait for the command to complete and handle the output
 			const [stdout, stderr] = await process.communicate_utf8_async(entry.content, token);
 
 			if (process.get_successful()) {

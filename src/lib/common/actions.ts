@@ -75,11 +75,6 @@ export function instanceofQrCodeAction(obj: object): obj is QrCodeAction {
 	return instanceofAction(obj) && obj.kind === 'qrcode';
 }
 
-/**
- * Test if an action is applicable to a clipboard entry.
- * @param entry the clipboard entry to test the action against.
- * @param action the action.
- */
 export function testAction(entry: ClipboardEntry, action: Action): boolean {
 	const type = !action.types?.length || action.types.includes(entry.type);
 	if (!type) return false;
@@ -93,12 +88,6 @@ export function testAction(entry: ClipboardEntry, action: Action): boolean {
 	}
 }
 
-/**
- * Test if an action is applicable to a clipboard entry and return the matches from the regular expression.
- * @param entry the clipboard entry to test the action against.
- * @param action the action.
- * @returns an array of matches if the action matches, null otherwise.
- */
 export function matchAction(entry: ClipboardEntry, action: Action): (string | undefined)[] | null {
 	const type = !action.types?.length || action.types.includes(entry.type);
 	if (!type) return null;
@@ -112,12 +101,6 @@ export function matchAction(entry: ClipboardEntry, action: Action): (string | un
 	}
 }
 
-/**
- * Find an action by its id in an action configuration.
- * @param config the action configuration.
- * @param id the id of the action.
- * @returns an action if an action with the id was found, undefined otherwise.
- */
 export function findActionById(config: ActionConfig, id: string): Action | undefined {
 	function findAction(actions: (Action | ActionSubmenu)[]): Action | undefined {
 		for (const action of actions) {
@@ -135,31 +118,15 @@ export function findActionById(config: ActionConfig, id: string): Action | undef
 	return findAction(config.actions);
 }
 
-/**
- * Check if an action is the default action for an entry.
- * @param config the action configuration.
- * @param entry the entry.
- * @param action the action.
- */
 export function isDefaultAction(config: ActionConfig, entry: ClipboardEntry, action: Action): boolean {
 	return config.defaults?.[entry.type] === action.id;
 }
 
-/**
- * Find the default action for an entry.
- * @param config the action configuration.
- * @param entry the entry.
- * @returns an action if a default action was found, undefined otherwise.
- */
 export function findDefaultAction(config: ActionConfig, entry: ClipboardEntry): Action | undefined {
 	const id = config.defaults?.[entry.type];
 	return id ? findActionById(config, id) : undefined;
 }
 
-/**
- * Get the default configuration.
- * @param ext extension or extension preferences.
- */
 export function defaultConfig(ext: Extension | ExtensionPreferences): ActionConfig {
 	const _ = ext.gettext.bind(ext);
 
@@ -229,12 +196,6 @@ export function defaultConfig(ext: Extension | ExtensionPreferences): ActionConf
 					colorAction('rgb', _('Rgb'), `^(?!rgb)`, ColorSpace.Rgb),
 					colorAction('hex', _('Hex'), `^(?!#)`, ColorSpace.Hex),
 					colorAction('hsl', _('Hsl'), `^(?!hsl)`, ColorSpace.Hsl),
-					// colorAction('hwb', _('Hwb'), `^(?!hwb)`, ColorSpace.Hwb),
-					// colorAction('linear-rgb', _('Linear Rgb'), `^(?!color\\(srgb-linear)`, ColorSpace.LinearRgb),
-					// colorAction('xyz', _('Xyz'), `^(?!color\\(xyz)`, ColorSpace.Xyz),
-					// colorAction('lab', _('Lab'), `^(?!lab)`, ColorSpace.Lab),
-					// colorAction('lch', _('Lch'), `^(?!lch)`, ColorSpace.Lch),
-					// colorAction('oklab', _('Oklab'), `^(?!oklab)`, ColorSpace.Oklab),
 					colorAction('oklch', _('Oklch'), `^(?!oklch)`, ColorSpace.Oklch),
 				],
 			},
@@ -256,11 +217,6 @@ export function defaultConfig(ext: Extension | ExtensionPreferences): ActionConf
 	};
 }
 
-/**
- * Load the configuration.
- * @param ext the extension or extension preferences.
- * @param save whether to save a default configuration if no configuration was found.
- */
 export async function loadConfig(ext: Extension | ExtensionPreferences, save: boolean = false): Promise<ActionConfig> {
 	const environment = GLib.get_environ();
 	const actions = GLib.environ_getenv(environment, 'DEBUG_COPYOUS_ACTIONS');
@@ -285,12 +241,6 @@ export async function loadConfig(ext: Extension | ExtensionPreferences, save: bo
 	return defaultConfig(ext);
 }
 
-/**
- * Save the configuration.
- * @param ext the extension or extension preferences.
- * @param config the configuration to save.
- * @param backup whether to back up the previous preferences.
- */
 export function saveConfig(ext: Extension | ExtensionPreferences, config: ActionConfig, backup: boolean = false): void {
 	const path = getActionsConfigPath(ext);
 	const dir = path.get_parent()!;
@@ -307,10 +257,6 @@ export function saveConfig(ext: Extension | ExtensionPreferences, config: Action
 	);
 }
 
-/**
- * Get all ids in actions.
- * @param actions the actions to iterate.
- */
 function* getIds(actions: (Action | ActionSubmenu)[]): Iterable<string> {
 	for (const action of actions) {
 		if (instanceofActionSubmenu(action)) {

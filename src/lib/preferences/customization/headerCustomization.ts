@@ -35,7 +35,6 @@ export class HeaderCustomization extends Adw.PreferencesGroup {
 		});
 		this.add(headerControlsVisibility);
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		settings.bind('show-header', showHeader, 'active', null);
 		bind_enum(settings, 'header-controls-visibility', headerControlsVisibility, 'selected');

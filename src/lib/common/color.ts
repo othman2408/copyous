@@ -156,13 +156,11 @@ const D50 = [0.3457 / 0.3585, 1.0, (1.0 - 0.3457 - 0.3585) / 0.3585] as const;
 // https://drafts.csswg.org/css-syntax-3/#number-token-diagram
 const Num = `[+-]?(?:\\d*\\.\\d+|\\d+)(?:[eE][+-]?\\d+)?`;
 
-// Units
 const Angle = `(?:(${Num})(deg|grad|rad|turn)?|none)`;
 const Percent = `(?:(${Num})(%)?|none)`;
 const Alpha = `(?:\\s*(?:\\/|,|\\s)\\s*${Percent})?`;
 const Comma = `(?:\\s+|\\s*,\\s*)`;
 
-// Color regular expressions
 const RgbRegex = `^rgba?\\(\\s*${Percent}${Comma}${Percent}${Comma}${Percent}${Alpha}\\s*\\)$`;
 const HslRegex = `^hsla?\\(\\s*${Angle}${Comma}${Percent}${Comma}${Percent}${Alpha}\\s*\\)$`;
 const HwbRegex = `^hwb\\(\\s*${Angle}${Comma}${Percent}${Comma}${Percent}${Alpha}\\s*\\)$`;
@@ -640,7 +638,6 @@ export class Color {
 		return this.space === ColorSpace.Oklch ? this : this.oklab().oklabToOklch();
 	}
 
-	/* Conversions */
 	private rgbToHex(): Color {
 		return new Color(ColorSpace.Hex, this.c1, this.c2, this.c3, this.alpha);
 	}
@@ -867,7 +864,6 @@ export class Color {
 		return new Color(ColorSpace.Oklab, l, a, b, this.alpha);
 	}
 
-	/* Utilities */
 	private calculateHue(): number {
 		const [r, g, b] = [this.c1 / 255, this.c2 / 255, this.c3 / 255];
 

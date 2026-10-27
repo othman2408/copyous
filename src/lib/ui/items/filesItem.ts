@@ -116,7 +116,6 @@ export class FilesPreview extends ContentPreview {
 				height += childNat;
 			}
 
-			// More files label
 			const n = this._totalFiles - count;
 			this._moreFiles.text = count
 				? ngettext('%d more file', '%d more files', n).format(n)

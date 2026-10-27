@@ -74,7 +74,6 @@ export class ClipboardItemMenu extends PopupMenu.PopupMenu<ActionPopupMenuSectio
 
 		this.actor.add_style_class_name('clipboard-item-menu');
 
-		// Tags
 		this._tagsItem = new TagsItem();
 		this.addMenuItem(this._tagsItem);
 
@@ -87,7 +86,6 @@ export class ClipboardItemMenu extends PopupMenu.PopupMenu<ActionPopupMenuSectio
 
 		this.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
-		// Edit
 		this._editSection = new PopupMenu.PopupMenuSection();
 		this.addMenuItem(this._editSection);
 
@@ -97,7 +95,6 @@ export class ClipboardItemMenu extends PopupMenu.PopupMenu<ActionPopupMenuSectio
 		});
 		this._editSection.addMenuItem(menuItem);
 
-		// Action menu
 		this._actionMenuSection = new ActionPopupMenuSection(ext);
 		this.addMenuItem(this._actionMenuSection);
 
@@ -111,7 +108,6 @@ export class ClipboardItemMenu extends PopupMenu.PopupMenu<ActionPopupMenuSectio
 			this,
 		);
 
-		// Add to ui
 		Main.layoutManager.uiGroup.add_child(this.actor);
 		this.actor.hide();
 
@@ -119,7 +115,6 @@ export class ClipboardItemMenu extends PopupMenu.PopupMenu<ActionPopupMenuSectio
 			if (event.type() === Clutter.EventType.KEY_PRESS) {
 				const key = event.get_key_symbol();
 
-				// Select tag with number
 				if (key === Clutter.KEY_0) {
 					this._tagsItem.tag = null;
 					this.close(BoxPointer.PopupAnimation.FADE);

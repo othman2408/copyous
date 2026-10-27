@@ -221,10 +221,6 @@ Gio._promisify(Gio.File.prototype, 'enumerate_children_async');
 Gio._promisify(Gio.File.prototype, 'read_async');
 Gio._promisify(Gio.InputStream.prototype, 'read_bytes_async');
 
-/**
- * Creates a text preview by reading the first 4096 bytes
- * @returns The text preview
- */
 async function createTextPreview(
 	ext: CopyousExtension,
 	file: Gio.File,
@@ -241,11 +237,6 @@ async function createTextPreview(
 	}
 }
 
-/**
- * Gets the file type for a file
- * @param file The file to find the file type for
- * @returns The file type and a Gio.File if a thumbnail was found for the file
- */
 export async function getFileType(
 	file: Gio.File,
 	cancellable: Gio.Cancellable | null = null,
@@ -281,14 +272,6 @@ export async function getFileType(
 	return [FileType.Unknown, thumbnail];
 }
 
-/**
- * Try to create a file preview for a file type
- * @param ext The extension
- * @param file The file to create a preview for
- * @param fileType The type of the file
- * @param thumbnail The thumbnail of the file if it exists
- * @returns the created file preview or null if either the file preview could not be created or if it is not allowed
- */
 export async function tryCreateFilePreview(
 	ext: CopyousExtension,
 	file: Gio.File,

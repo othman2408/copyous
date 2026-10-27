@@ -123,7 +123,6 @@ export class ActionDefaultsPage extends Adw.NavigationPage {
 		const page = new Adw.PreferencesPage();
 		toolbarView.content = page;
 
-		// Defaults
 		const defaults = new Adw.PreferencesGroup({
 			title: _('Default Actions'),
 		});

@@ -52,7 +52,6 @@ export class CodeItem extends ClipboardItem {
 
 		this.ext.settings.connectObject('changed::tab-width', this.updateCode.bind(this), this._code);
 
-		// Update label
 		this.entry.bind_property('content', this._code, 'code', GObject.BindingFlags.SYNC_CREATE);
 		this.entry.connectObject(
 			'notify::content',
@@ -69,7 +68,6 @@ export class CodeItem extends ClipboardItem {
 		this.updateCode();
 		this.updateCodeInfo();
 
-		// Update metadata
 		this._code.connect('notify::language', () => {
 			this.entry.metadata = { language: this._code.language };
 		});

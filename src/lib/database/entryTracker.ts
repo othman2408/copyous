@@ -65,13 +65,6 @@ export class ClipboardEntryTracker {
 		const dbFile = dir.get_child(`${fileName}.db`);
 		const jsonFile = dir.get_child(`${fileName}.json`);
 
-		// Default database strategy is as followed:
-		// 1. (memory)  in-memory-database (deprecated) set to true
-		// 2. (sqlite)  .db file exists
-		// 3. (json)    .json file exists
-		// 4. (sqlite)  sqlite backend can be loaded
-		// 5. (json)    json backend can be loaded
-		// 6. fallback to in-memory
 		let entries: ClipboardEntry[] | null = null;
 		if (backend === DatabaseBackend.Default) {
 			this._fromDefault = true;
@@ -109,20 +102,16 @@ export class ClipboardEntryTracker {
 			entries = await this.initJson(jsonFile);
 		}
 
-		// Fallback to in-memory
 		entries ??= await this.initMemory();
 
-		// Track all entries
 		await this.track(entries);
 
-		// Delete oldest entries
 		await this.deleteOldest();
 
 		return Array.from(this._entries.values());
 	}
 
 	private getFile(): Gio.File {
-		// Check if DEBUG_COPYOUS_DBPATH is set
 		const environment = GLib.get_environ();
 		const debugPath = GLib.environ_getenv(environment, 'DEBUG_COPYOUS_DBPATH');
 		if (debugPath) {
@@ -130,7 +119,6 @@ export class ClipboardEntryTracker {
 			return Gio.File.new_for_path(debugPath);
 		}
 
-		// Get database location or use default ${XDG_DATA_HOME}/${EXTENSION UUID}
 		const location = this.settings.get_string('database-location');
 		return location ? Gio.File.new_for_path(location) : getDefaultDatabaseFile(this.ext, DatabaseBackend.Default);
 	}
@@ -201,13 +189,6 @@ export class ClipboardEntryTracker {
 		await database?.close();
 	}
 
-	/**
-	 * Inserts an entry into the database
-	 * @param type The type of the entry
-	 * @param content The content of the entry
-	 * @param metadata The metadata of the entry
-	 * @returns The inserted entry or null if the entry could not be inserted or is already tracked
-	 */
 	public async insert(
 		type: ItemType,
 		content: string,
@@ -219,7 +200,6 @@ export class ClipboardEntryTracker {
 		const id = await database?.selectConflict({ type, content });
 		if (this._destroyed || database !== this._database) return null;
 		if (id != null) {
-			// Check if the entry is already tracked
 			const trackedEntry = this._entries.get(id);
 			if (trackedEntry) {
 				trackedEntry.datetime = GLib.DateTime.new_now_utc();
@@ -230,10 +210,8 @@ export class ClipboardEntryTracker {
 		const entry = await database?.insert(type, content, metadata);
 		if (!entry || this._destroyed || database !== this._database) return null;
 
-		// Start tracking it
 		await this.track([entry]);
 
-		// Also delete oldest entries
 		await this.deleteOldest();
 
 		return this.has(entry) ? entry : null;
@@ -269,11 +247,9 @@ export class ClipboardEntryTracker {
 					const id = await this._database
 						?.updateProperty(entry, 'content')
 						.catch((error: unknown) => this.logger.error(error));
-					// If entry conflicts with another entry, delete it
 					if (id !== undefined && id >= 0) {
 						entry.emit('delete');
 
-						// Update the date of the other entry
 						const conflicted = this._entries.get(id);
 						if (conflicted) {
 							conflicted.datetime = entry.datetime;
@@ -325,7 +301,6 @@ export class ClipboardEntryTracker {
 
 	private async delete(entry: ClipboardEntry) {
 		if (entry.type === ItemType.Image) {
-			// Delete image
 			try {
 				const file = Gio.File.new_for_uri(entry.content);
 				if (file.query_exists(null)) {
@@ -335,7 +310,6 @@ export class ClipboardEntryTracker {
 				this.logger.error('Failed to delete image', entry.content);
 			}
 		} else if (entry.type === ItemType.Link && entry.metadata) {
-			// Delete thumbnail image
 			const metadata: { image: string | null } = { image: null, ...entry.metadata };
 			if (metadata.image) {
 				try {
@@ -349,7 +323,6 @@ export class ClipboardEntryTracker {
 			}
 		}
 
-		// Delete from database if not deleted already
 		if (this._entries.has(entry.id)) {
 			await this._database?.delete(entry);
 			this._entries.delete(entry.id);

@@ -84,7 +84,6 @@ const Colors = {
 
 // https://highlightjs.readthedocs.io/en/latest/css-classes-reference.html
 const Dark = {
-	// General purpose
 	'keyword': { fgcolor: 'orange_2', weight: 'bold' },
 	'built_in': { fgcolor: 'teal_2', weight: 'bold' },
 	'type': { fgcolor: 'teal_2', weight: 'bold' },
@@ -111,16 +110,13 @@ const Dark = {
 	'params': {},
 	'comment': { fgcolor: 'dark_1' },
 	'doctag': { fgcolor: 'light_7' },
-	// Meta
-	'meta': { fgcolor: 'violet_2' }, // orange_3
+	'meta': { fgcolor: 'violet_2' },
 	'meta.prompt': { fgcolor: 'yellow_4' },
-	// Tags, attributes, configs
 	'section': { fgcolor: 'teal_3', weight: 'bold' },
 	'tag': { fgcolor: 'teal_3' },
 	'name': { fgcolor: 'teal_3' },
 	'attr': { fgcolor: 'orange_3' },
 	'attribute': { fgcolor: 'orange_3' },
-	// Text markup
 	'bullet': { fgcolor: 'orange_4', weight: 'bold' },
 	'code': { fgcolor: 'violet_2' },
 	'emphasis': { style: 'italic' },
@@ -128,22 +124,18 @@ const Dark = {
 	'formula': {},
 	'link': { underline: 'single' },
 	'quote': { fgcolor: 'dark_1' },
-	// Css
 	'selector-tag': { fgcolor: 'teal_3' },
 	'selector-id': { fgcolor: 'teal_3', weight: 'bold' },
 	'selector-class': { fgcolor: 'chameleon_3' },
 	'selector-attr': { fgcolor: 'teal_3' },
 	'selector-pseudo': { fgcolor: 'violet_2', weight: 'bold' },
-	// Templates
 	'template-tag': { fgcolor: 'violet_2' },
 	'template-variable': { fgcolor: 'violet_2' },
-	// Diff
 	'addition': { fgcolor: 'teal_3' },
 	'deletion': { fgcolor: 'red_1' },
 };
 
 const Light = {
-	// General purpose
 	'keyword': { fgcolor: 'orange_5', weight: 'bold' },
 	'built_in': { fgcolor: 'teal_5', weight: 'bold' },
 	'type': { fgcolor: 'teal_5', weight: 'bold' },
@@ -170,16 +162,13 @@ const Light = {
 	'params': {},
 	'comment': { fgcolor: 'dark_1' },
 	'doctag': { fgcolor: 'dark_3' },
-	// Meta
-	'meta': { fgcolor: 'violet_4' }, // orange_3
+	'meta': { fgcolor: 'violet_4' },
 	'meta.prompt': { fgcolor: 'yellow_6' },
-	// Tags, attributes, configs
 	'section': { fgcolor: 'teal_5', weight: 'bold' },
 	'tag': { fgcolor: 'teal_5' },
 	'name': { fgcolor: 'teal_5' },
 	'attr': { fgcolor: 'orange_5' },
 	'attribute': { fgcolor: 'orange_5' },
-	// Text markup
 	'bullet': { fgcolor: 'orange_5', weight: 'bold' },
 	'code': { fgcolor: 'violet_4' },
 	'emphasis': { style: 'italic' },
@@ -187,16 +176,13 @@ const Light = {
 	'formula': {},
 	'link': { underline: 'single' },
 	'quote': { fgcolor: 'dark_1' },
-	// Css
 	'selector-tag': { fgcolor: 'teal_5' },
 	'selector-id': { fgcolor: 'teal_5', weight: 'bold' },
 	'selector-class': { fgcolor: 'chameleon_3' },
 	'selector-attr': { fgcolor: 'teal_5' },
 	'selector-pseudo': { fgcolor: 'violet_4', weight: 'bold' },
-	// Templates
 	'template-tag': { fgcolor: 'violet_4' },
 	'template-variable': { fgcolor: 'violet_4' },
-	// Diff
 	'addition': { fgcolor: 'teal_4' },
 	'deletion': { fgcolor: 'red_1' },
 };
@@ -209,11 +195,6 @@ export interface CodeLabelConstructorProps {
 	tabWidth: number;
 }
 
-/**
- * Applies a theme to highlight.js output
- * @param colorScheme the color scheme
- * @param highlighted the highlighted highlight.js output
- */
 export function applyTheme(colorScheme: CustomColorScheme | undefined, highlighted: string): string {
 	const theme = colorScheme === CustomColorScheme.Light ? Light : Dark;
 	return highlighted.replace(/class="([^"]*)"/gm, (_, classes: string) => {
@@ -287,7 +268,6 @@ export class CodeLabel extends St.Label {
 		this._showLineNumbers = params.showLineNumbers;
 		this._tabWidth = params.tabWidth;
 
-		// Update text when global color scheme changes
 		if (this.ext.themeManager) {
 			this._colorSchemeChangedId = this.ext.themeManager?.connect(
 				'notify::color-scheme',
@@ -295,7 +275,6 @@ export class CodeLabel extends St.Label {
 			);
 		}
 
-		// Update text after hljs is loaded
 		this._disconnectHljs = this.ext.connectHljsInit(this.updateText.bind(this));
 
 		this.updateText();
@@ -399,7 +378,6 @@ export class CodeLabel extends St.Label {
 		this.clutter_text.line_wrap = lines.length === 1;
 
 		if (this.showLineNumbers && lines.length > 1) {
-			// Add line numbers
 			const color =
 				this.ext.themeManager?.colorScheme === CustomColorScheme.Light ? Colors.dark_7 : Colors.light_1;
 			const span = `<span color="${color}" alpha="50%">`;

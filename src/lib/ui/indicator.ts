@@ -105,10 +105,8 @@ export class ClipboardIndicator extends PanelMenu.Button {
 		this.menu.addAction(_('Clear History'), () => this.confirmClearHistory());
 		this.menu.addAction(_('Settings'), () => ext.openPreferences());
 
-		// Add to panel
 		Main.panel.addToStatusArea(ext.uuid, this, 1, 'right');
 
-		// Bind properties
 		this.ext.settings.connectObject(
 			'changed::indicator-display',
 			this.updateSettings.bind(this),

@@ -37,7 +37,6 @@ class LinkExclusionsPage extends Adw.NavigationPage {
 		const page = new Adw.PreferencesPage();
 		toolbarView.content = page;
 
-		// Link Exclusion Patterns
 		const linkPreviewExclusionPatternsGroup = new ExclusionsGroup(
 			window,
 			_('Add Pattern'),
@@ -105,7 +104,6 @@ export class LinkItemCustomization extends Adw.ExpanderRow {
 
 		configureLinkExclusions.connect('activated', () => window.push_subpage(linkExclusionsPage));
 
-		// Bind properties
 		const settings = prefs.getSettings().get_child('link-item');
 		settings.bind('show-link-preview', showLinkPreview, 'active', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('show-link-preview-image', showLinkPreviewImage, 'active', Gio.SettingsBindFlags.DEFAULT);
@@ -123,7 +121,6 @@ export class LinkItemCustomization extends Adw.ExpanderRow {
 
 		showLinkPreview.bind_property('active', showLinkPreviewImage, 'sensitive', GObject.BindingFlags.SYNC_CREATE);
 
-		// Background size
 		function updateSensitive() {
 			const sensitive = showLinkPreviewImage.sensitive && showLinkPreviewImage.active;
 			linkPreviewImageBackgroundSize.sensitive = sensitive;

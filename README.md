@@ -1,123 +1,45 @@
-# <img src="resources/images/icon.svg" height="32px" alt="Icon"/> Copyous - Clipboard Manager
-[![GitHub License](https://img.shields.io/github/license/boerdereinar/copyous)](./LICENSE)
-[![GitHub Release](https://img.shields.io/github/v/release/boerdereinar/copyous)](https://github.com/boerdereinar/copyous/releases/latest)
-[![Extension Downloads](https://img.shields.io/gnome-extensions/dt/copyous%40boerdereinar.dev?logo=gnome&logoColor=white&cacheSeconds=86400)](https://extensions.gnome.org/extension/8834/copyous/)
+# Copyous
 
-![Screenshot](resources/images/screenshot.png)
+A GNOME Shell clipboard manager for text, code, images, files, links, and colors. Supports search, pinned items, tags, custom actions, and configurable shortcuts.
 
-## Features
-- Supports text, code, images, files, links, characters and colors.
-- Can be opened at mouse pointer or text cursor
-- Pin favorite items
-- Group items with 9 colored tags
-- Customizable clipboard actions
-- Highly customizable
+## Build and install
 
-## Installation
-For the extension to work optimally you need to install the following dependencies:
-- Libgda 5.0 or 6.0 with SQLite support
-- GSound
+Requires Node.js 24.12 or newer, pnpm, Make, jq, gettext, GLib tools, and `gnome-extensions`. The GNOME Shell submodule supplies the Sass theme sources. Optional runtime packages include Libgda 5 or 6 with SQLite support and GSound; JSON storage works without Libgda.
 
-<details>
-<summary>Install Libgda and GSound</summary>
+```sh
+git submodule update --init --recursive
+pnpm install --ignore-scripts --frozen-lockfile
+make build RELEASE=1
+make install RELEASE=1
+```
 
-| Distro        | Command                                                                            |
-|---------------|------------------------------------------------------------------------------------|
-| Fedora        | `sudo dnf install libgda libgda-sqlite`                                            |
-| Arch Linux    | `sudo pacman -S libgda6`                                                           |
-| Ubuntu/Debian | `sudo apt install gir1.2-gda-5.0 gir1.2-gsound-1.0`                                |
-| openSUSE      | `sudo zypper install libgda-6_0-sqlite typelib-1_0-Gda-6_0 typelib-1_0-GSound-1_0` |
-</details>
+Log out and back in after updating, then enable Copyous:
 
-### From Gnome Extensions (Recommended)
-[<img width="200" src="https://github.com/andyholmes/gnome-shell-extensions-badge/raw/master/get-it-on-ego.png">](https://extensions.gnome.org/extension/8834/copyous/)
+```sh
+gnome-extensions enable copyous@boerdereinar.dev
+```
 
-### From Latest GitHub Release
-1. Download the latest release from [Releases](https://github.com/boerdereinar/copyous/releases).
-2. Install extension:
-   ```shell
-   gnome-extensions install -f ~/Downloads/copyous@boerdereinar.dev.zip
-   ```
-3. Restart the session by logging out.
-4. Enable the extension in [Extension Manager](https://flathub.org/en/apps/com.mattjakeman.ExtensionManager) or by running the following command:
-   ```shell
-   gnome-extensions enable copyous@boerdereinar.dev
-   ```
+The build and type-aware linting use TypeScript 7. Oxlint checks correctness and GNOME-specific restrictions; Oxfmt handles formatting and import sorting. Stylesheets use native Dart Sass.
 
-### From Source
-1. Install the following prerequisites:
-	- Make
-    - Node.js
-    - [pnpm](https://pnpm.io/installation)
-    - [jq](https://jqlang.org/)
-2. Clone the repository:
-   ```shell
-   git clone --recurse-submodules https://github.com/boerdereinar/copyous
-   cd copyous
-   ```
-3. Build and install the extension:
-   ```shell
-   pnpm install
-   ```
-4. Restart the session by logging out.
-5. Enable the extension in [Extension Manager](https://flathub.org/en/apps/com.mattjakeman.ExtensionManager) or by running the following command:
-   ```shell
-   gnome-extensions enable copyous@boerdereinar.dev
-   ```
+## Use
 
-## Configuration
-You can open the extension settings either through the panel indicator, [Extension Manager](https://flathub.org/en/apps/com.mattjakeman.ExtensionManager) or by running the following command:
-```shell
+Open history with **Super + Shift + V**. Select an item and press **Enter** to copy it, **Ctrl + S** to pin it, or **Delete** to remove it. Preferences contain the complete shortcuts and action settings:
+
+```sh
 gnome-extensions prefs copyous@boerdereinar.dev
 ```
 
-## Shortcuts
-The most common shortcuts are listed below. Some can be customized in the extension settings. You can also find a complete list of all available shortcuts there.
+## Development
 
-| Description           | Shortcut                                                                                                      |
-|-----------------------|---------------------------------------------------------------------------------------------------------------|
-| Open Clipboard Dialog | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>V</kbd>                                                                |
-| Toggle Incognito Mode | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>Ctrl</kbd> <kbd>V</kbd>                                                |
-| Copy Item             | <kbd>Enter</kbd> / <kbd>Space</kbd>                                                                           |
-| Run Default Action    | <kbd>Ctrl</kbd> <kbd>Enter</kbd> / <kbd>Space</kbd>                                                           |
-| Pin Item              | <kbd>Ctrl</kbd> <kbd>S</kbd>                                                                                  |
-| Delete Item           | <kbd>Delete</kbd> (Hold <kbd>Shift</kbd> to force delete)                                                     |
-| Navigation            | <kbd>Tab</kbd> / <kbd>↑</kbd> / <kbd>↓</kbd> / <kbd>←</kbd> / <kbd>→</kbd> / <kbd>Home</kbd> / <kbd>End</kbd> |
-| Jump to Item          | <kbd>Ctrl</kbd> <kbd>0</kbd>...<kbd>9</kbd>                                                                   |
-| Toggle Pinned Search  | <kbd>Alt</kbd>                                                                                                |
-| Cycle Item Type       | <kbd>Ctrl</kbd> <kbd>Tab</kbd> / <kbd>Shift</kbd> <kbd>Ctrl</kbd> <kbd>Tab</kbd>                              |
-| Cycle Item Tag        | <kbd>Ctrl</kbd> <kbd>\`</kbd> / <kbd>Shift</kbd> <kbd>Ctrl</kbd> <kbd>\`</kbd>                                |
-
-## DBus
-**Name:** `org.gnome.Shell.Extensions.Copyous`
-**Path:** `/org/gnome/Shell/Extensions/Copyous`
-
-| Method         | Arguments                                                                                                    | Description                       |
-|----------------|--------------------------------------------------------------------------------------------------------------|-----------------------------------|
-| `Toggle`       |                                                                                                              | Show or hide the clipboard dialog |
-| `Show`         |                                                                                                              | Show the clipboard dialog         |
-| `Hide`         |                                                                                                              | Hide the clipboard dialog         |
-| `ClearHistory` | `all`:<br/>&emsp; if `true`, clears all history; <br/>&nbsp;&emsp;if `false`, clears unpinned/untagged items | Clear clipboard history           |
-
-### Examples
-```shell
-gdbus call --session \
-    --dest org.gnome.Shell.Extensions.Copyous \
-    --object-path /org/gnome/Shell/Extensions/Copyous \
-    --method org.gnome.Shell.Extensions.Copyous.Toggle
-```
-```shell
-gdbus call --session \
-    --dest org.gnome.Shell.Extensions.Copyous \
-    --object-path /org/gnome/Shell/Extensions/Copyous \
-    --method org.gnome.Shell.Extensions.Copyous.ClearHistory false
+```sh
+make lint
+make test RELEASE=1
 ```
 
-## Contributing
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for more information.
+Tests need GJS, Libgda, and `gnome-shell-test-tool` with headless Wayland support. SQLite test fixtures also require `sqlite3`. Tests use isolated temporary history and settings. Run Shell tests sequentially because they share the test compositor socket.
 
-## Acknowledgments
-Copyous is a full rewrite of [Pano](https://github.com/oae/gnome-shell-pano).
+Copy `.env.template` to `.env` for development settings. `make launch` installs a debug build and starts a nested Shell; `make launch-settings` opens preferences with logs.
 
-## License
-This project is licensed under the **GNU General Public License 3 or Later**.
+## Credits and license
+
+Copyous is a rewrite of [Pano](https://github.com/oae/gnome-shell-pano). Licensed under [GPL-3.0-or-later](LICENSE). Third-party source files retain their own license notices.

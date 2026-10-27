@@ -1,7 +1,6 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
-/** A cancellable wait that always settles, including during extension teardown. */
 export function delay(milliseconds: number, cancellable: Gio.Cancellable): Promise<void> {
 	if (cancellable.is_cancelled()) return Promise.resolve();
 	let sourceId = 0;

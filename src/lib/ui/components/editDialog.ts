@@ -17,7 +17,6 @@ import { registerClass } from '../../common/gjs.js';
 import { Icon, loadIcon } from '../../common/icons.js';
 import { ClipboardEntry, Language } from '../../database/database.js';
 
-/** Entry with proper height for multiline text and event forwarding */
 @registerClass()
 export class Entry extends St.Entry {
 	constructor(props: Partial<St.Entry.ConstructorProps>) {
@@ -278,7 +277,6 @@ export class EditDialog extends ModalDialog.ModalDialog {
 			box.add_child(this._languageButton);
 		}
 
-		// Entry
 		this._entry = new MultilineEntry({
 			style_class: 'clipboard-item-edit-dialog-entry',
 			can_focus: true,
@@ -293,7 +291,6 @@ export class EditDialog extends ModalDialog.ModalDialog {
 			this._entry.add_style_class_name('monospace');
 		}
 
-		// Buttons
 		this.addButton({
 			label: _('Cancel'),
 			action: () => this.close(),

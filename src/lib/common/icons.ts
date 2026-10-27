@@ -3,7 +3,6 @@ import Gio from 'gi://Gio';
 import type { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 export const Icon = {
-	// Icon Files
 	Character: 'character-symbolic',
 	CheckOutline: 'check-round-outline-symbolic',
 	Clipboard: 'clipboard-symbolic',
@@ -24,7 +23,6 @@ export const Icon = {
 	Tag: 'tag-symbolic',
 	Text: 'text-symbolic',
 
-	// System Icons
 	Action: 'media-playback-start-symbolic',
 	Add: 'list-add-symbolic',
 	Check: 'object-select-symbolic',

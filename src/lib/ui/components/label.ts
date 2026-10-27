@@ -8,24 +8,13 @@ interface ConstructorProps {
 	tabWidth: number;
 }
 
-/**
- * Remove leading/trailing blank lines (empty lines or lines containing just spaces/tabs)
- * @param text The text to trim
- */
 export function trim(text: string): string {
 	return text.replace(/^([ \t]*\n)*/, '').replace(/(\n[ \t]*)*$/, '');
 }
 
-/**
- * Normalize indentation by replacing tabs with spaces and removing any leading indentation
- * @param text The text to normalize
- * @param tabWidth The number of spaces in a tab
- */
 export function normalizeIndentation(text: string, tabWidth: number): string {
-	// Replace tabs with spaces
 	text = text.replaceAll('\t', ' '.repeat(tabWidth));
 
-	// Remove leading indentation
 	let length = Number.MAX_SAFE_INTEGER;
 	for (const match of text.matchAll(/^ *(?! |$)/gm)) {
 		length = Math.min(length, match[0].length);

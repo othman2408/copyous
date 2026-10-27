@@ -34,13 +34,11 @@ interface DataModelIter<T> extends Omit<Gda5.DataModelIter, 'get_value_for_field
 
 function new_connection(Gda: typeof Gda5, cncString: string): Gda5.Connection {
 	if (Gda.__version__ === '6.0') {
-		// Gda 6
 		return new Gda.Connection({
 			provider: Gda.Config.get_provider('SQLite'),
 			cncString,
 		});
 	} else {
-		// Gda 5
 		const conn = Gda.Connection.new_from_string('SQLite', cncString, null, Gda.ConnectionOptions.THREAD_ISOLATED);
 		if (conn.cnc_string === cncString) return conn;
 
@@ -55,7 +53,6 @@ function new_connection(Gda: typeof Gda5, cncString: string): Gda5.Connection {
 function open_async(connection: Gda5.Connection | Gda6.Connection): Promise<boolean> {
 	return new Promise((resolve, reject: (reason: Error) => void) => {
 		if ('open_async' in connection) {
-			// Gda 6
 			GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
 				try {
 					connection.set_main_context(null, GLib.MainContext.ref_thread_default());
@@ -67,7 +64,6 @@ function open_async(connection: Gda5.Connection | Gda6.Connection): Promise<bool
 				return GLib.SOURCE_REMOVE;
 			});
 		} else {
-			// Gda 5
 			resolve(connection.open());
 		}
 	});
@@ -75,7 +71,7 @@ function open_async(connection: Gda5.Connection | Gda6.Connection): Promise<bool
 
 function add_expr_value(builder: Gda5.SqlBuilder | Gda6.SqlBuilder | SqlBuilder<unknown>, value: unknown) {
 	if (builder.add_expr_value.length === 1) {
-		return (builder as Gda6.SqlBuilder).add_expr_value(value as GObject.Value);
+		return (builder as Gda6.SqlBuilder).add_expr_value(value);
 	} else {
 		return (builder as Gda5.SqlBuilder).add_expr_value(null, value);
 	}
@@ -94,7 +90,6 @@ function unescape_sql(connection: Gda5.Connection, builder: Gda5.SqlBuilder | Sq
 	return connection.parse_sql_string(unescapedSql)[0];
 }
 
-/** Poll the Gda 5 worker without imposing 100 ms latency on every statement. */
 function fetchResult(
 	connection: Gda5.Connection,
 	id: number,
@@ -159,7 +154,7 @@ async function async_statement_execute_select<T>(
 		const id = connection.async_statement_execute(
 			statement as Gda5.Statement,
 			null,
-			Gda.StatementModelUsage.RANDOM_ACCESS as Gda5.StatementModelUsage,
+			Gda.StatementModelUsage.RANDOM_ACCESS,
 			null,
 			false,
 		);
@@ -193,7 +188,7 @@ async function async_statement_execute_non_select(
 		const id = connection.async_statement_execute(
 			statement as Gda5.Statement,
 			null,
-			Gda.StatementModelUsage.RANDOM_ACCESS as Gda5.StatementModelUsage,
+			Gda.StatementModelUsage.RANDOM_ACCESS,
 			null,
 			true,
 		);
@@ -219,9 +214,6 @@ function unescapeContent(content: string): string {
 	return content.replace(/\\\\/g, '\\');
 }
 
-/**
- * Database with Gda backend
- */
 export class GdaDatabase implements Database {
 	private readonly logger;
 	private readonly _Gda: typeof Gda;
@@ -245,7 +237,6 @@ export class GdaDatabase implements Database {
 			cncString = 'DB_NAME=:memory:';
 		}
 
-		// Establish connection
 		this._connection = new_connection(this._Gda, cncString);
 	}
 
@@ -253,7 +244,6 @@ export class GdaDatabase implements Database {
 		await open_async(this._connection);
 		this.logger.info('Opened database connection');
 
-		// Version table
 		const [versionTableStmt] = this._connection.parse_sql_string(`
 			CREATE TABLE IF NOT EXISTS 'clipboard_version' (
 				'id'      integer PRIMARY KEY CHECK (id = 1),
@@ -261,8 +251,6 @@ export class GdaDatabase implements Database {
 			)`);
 		await async_statement_execute_non_select(this._Gda, this._connection, versionTableStmt, this._cancellable);
 
-		// Get current schema version
-		// SELECT (version) FROM 'clipboard_version'
 		const builder1 = new this._Gda.SqlBuilder({ stmt_type: this._Gda.SqlStatementType.SELECT });
 		builder1.select_add_target('clipboard_version', null);
 		builder1.select_add_field('version', null, null);
@@ -277,22 +265,18 @@ export class GdaDatabase implements Database {
 
 		let version = 0;
 		if (versionResult.get_n_rows() > 0) {
-			// Get version
 			const versionIter = versionResult.create_iter();
 			versionIter.move_next();
 			version = versionIter.get_value_for_field('version');
 		} else {
-			// Insert default version
 			const [addVersionStmt] = this._connection.parse_sql_string(
 				`INSERT OR IGNORE INTO clipboard_version (id, version) VALUES (1, 0)`,
 			);
 			await async_statement_execute_non_select(this._Gda, this._connection, addVersionStmt, this._cancellable);
 		}
 
-		// Run migrations based on version
 		switch (version) {
 			case 0: {
-				// Create table
 				const [stmt] = this._connection.parse_sql_string(`
 					CREATE TABLE IF NOT EXISTS 'clipboard' (
 						'id'       integer   NOT NULL UNIQUE PRIMARY KEY AUTOINCREMENT,
@@ -310,7 +294,6 @@ export class GdaDatabase implements Database {
 			/* falls through */
 			case 1: {
 				try {
-					// Add title column
 					const [addColumnStmt] = this._connection.parse_sql_string(
 						`ALTER TABLE 'clipboard' ADD COLUMN 'title' text;`,
 					);
@@ -326,14 +309,12 @@ export class GdaDatabase implements Database {
 			}
 		}
 
-		// Update to current version
 		const [indexStmt] = this._connection.parse_sql_string(
 			'CREATE INDEX IF NOT EXISTS clipboard_datetime_idx ON clipboard (datetime DESC)',
 		);
 		await async_statement_execute_non_select(this._Gda, this._connection, indexStmt, this._cancellable);
 
 		if (version !== DATABASE_VERSION) {
-			// UPDATE 'version' SET version=DATABASE_VERSION
 			const builder2 = new this._Gda.SqlBuilder({ stmt_type: this._Gda.SqlStatementType.UPDATE });
 			builder2.set_table('clipboard_version');
 			builder2.add_field_value_id(builder2.add_id('version'), add_expr_value(builder2, DATABASE_VERSION));
@@ -350,7 +331,6 @@ export class GdaDatabase implements Database {
 				return [];
 			}
 
-			// SELECT id FROM table (WHERE NOT (pinned == true OR tag IS NOT NULL))?
 			const [selectBuilder, where] = this.selectToDeleteBuilder(history === ClipboardHistory.KeepPinnedAndTagged);
 
 			const selectStmt = selectBuilder.get_statement();
@@ -367,9 +347,7 @@ export class GdaDatabase implements Database {
 				deleted.push(iter.get_value_for_field('id'));
 			}
 
-			// Only delete if there are entries to delete
 			if (deleted.length > 0) {
-				// DELETE FROM table (WHERE ...)? RETURNING id;
 				const deleteBuilder = new this._Gda.SqlBuilder({ stmt_type: this._Gda.SqlStatementType.DELETE });
 				deleteBuilder.set_table('clipboard');
 
@@ -397,7 +375,6 @@ export class GdaDatabase implements Database {
 
 	public async entries(): Promise<ClipboardEntry[]> {
 		try {
-			// SELECT * FROM clipboard
 			const builder = new this._Gda.SqlBuilder({ stmt_type: this._Gda.SqlStatementType.SELECT });
 			builder.select_add_target('clipboard', null);
 			builder.select_add_field('id', null, null);
@@ -468,7 +445,6 @@ export class GdaDatabase implements Database {
 
 	public async selectConflict(entry: ClipboardEntry | { type: ItemType; content: string }): Promise<number | null> {
 		try {
-			// SELECT id FROM table WHERE type == entry.type AND content == entry.content LIMIT 1
 			const builder = new this._Gda.SqlBuilder({ stmt_type: this._Gda.SqlStatementType.SELECT });
 			builder.select_add_target('clipboard', null);
 			builder.select_add_field('id', null, null);
@@ -492,7 +468,6 @@ export class GdaDatabase implements Database {
 			);
 			builder.select_set_limit(add_expr_value(builder, 1), add_expr_value(builder, 0));
 
-			// Get id
 			const stmt = builder.get_statement();
 			const datamodel = await async_statement_execute_select<ClipboardEntry>(
 				this._Gda,
@@ -520,21 +495,17 @@ export class GdaDatabase implements Database {
 		metadata: Metadata | null = null,
 	): Promise<ClipboardEntry | null> {
 		try {
-			// INSERT INTO table (type, content, pinned, tag, datetime, metadata)
-			// VALUES (entry.type, entry.content, entry.pinned, entry.tag, entry.datetime, entry.metadata)
 			const builder = new this._Gda.SqlBuilder({
 				stmt_type: this._Gda.SqlStatementType.INSERT,
 			}) as SqlBuilder<ClipboardEntry>;
 			builder.set_table('clipboard');
 			builder.add_field_value_as_gvalue('type', type);
-			// NOTE: content will be inserted incorrectly
 			builder.add_field_value_as_gvalue('content', content);
 			builder.add_field_value_as_gvalue('pinned', false);
 			const datetime = GLib.DateTime.new_now_utc();
 			builder.add_field_value_as_gvalue('datetime', convert_datetime(datetime));
 			if (metadata) builder.add_field_value_as_gvalue('metadata', JSON.stringify(metadata));
 
-			// Execute
 			const stmt = builder.get_statement();
 			const [, row] = await async_statement_execute_non_select(
 				this._Gda,
@@ -562,9 +533,6 @@ export class GdaDatabase implements Database {
 			if (property === 'metadata') value = JSON.stringify(entry['metadata']);
 			else if (property === 'datetime') value = convert_datetime(entry['datetime']);
 
-			// UPDATE table
-			// SET property = entry.property
-			// WHERE id == entry.id
 			const builder = new this._Gda.SqlBuilder({
 				stmt_type: this._Gda.SqlStatementType.UPDATE,
 			}) as SqlBuilder<ClipboardEntry>;
@@ -589,10 +557,9 @@ export class GdaDatabase implements Database {
 				this._cancellable,
 			);
 			if (rows !== -1 || (property !== 'type' && property !== 'content')) {
-				return -1; // success
+				return -1;
 			}
 
-			// Return the id of the conflicting entry
 			const id = await this.selectConflict(entry);
 			return id ?? -1;
 		} catch (e) {
@@ -605,7 +572,6 @@ export class GdaDatabase implements Database {
 
 	public async delete(entry: ClipboardEntry): Promise<boolean> {
 		try {
-			// DELETE FROM table WHERE id == entry.id
 			const builder = new this._Gda.SqlBuilder({
 				stmt_type: this._Gda.SqlStatementType.DELETE,
 			}) as SqlBuilder<ClipboardEntry>;
@@ -637,18 +603,15 @@ export class GdaDatabase implements Database {
 
 	public async deleteOldest(offset: number, olderThanMinutes: number): Promise<number[]> {
 		try {
-			// WITH select1 AS (...) (SELECT id FROM select1) UNION (select2)
 			const selectBuilder = new this._Gda.SqlBuilder({
 				stmt_type: this._Gda.SqlStatementType.COMPOUND,
 			}) as SqlBuilder<ClipboardEntry>;
 			selectBuilder.compound_set_type(this._Gda.SqlStatementCompoundType.UNION);
 
-			// SELECT id FROM table WHERE NOT (pinned == true OR tag IS NOT NULL) ORDER BY datetime LIMIT -1 OFFSET offset
 			const [select1Builder] = this.selectToDeleteBuilder();
 			select1Builder.select_order_by(select1Builder.add_id('datetime'), false, null);
 			select1Builder.select_set_limit(add_expr_value(select1Builder, -1), add_expr_value(select1Builder, offset));
 
-			// SELECT id FROM table WHERE NOT (pinned == true OR tag IS NOT NULL) AND datetime < DATETIME('now', '-n minutes')
 			let selectStmt: Gda.Statement;
 			if (olderThanMinutes > 0) {
 				// Workaround for ORDER BY not working inside compound selector and add_subselect not being exposed in Gda 5.0
@@ -660,16 +623,13 @@ export class GdaDatabase implements Database {
 				const [select2Builder] = this.selectToDeleteBuilder(true, olderThanMinutes);
 				selectBuilder.compound_add_sub_select_from_builder(select2Builder);
 
-				// SELECT id FROM (SELECT id FROM table WHERE ...)
 				const select1Sql = this._connection.statement_to_sql(select1Builder.get_statement(), null, 0)[0];
 				const selectSql = this._connection.statement_to_sql(selectBuilder.get_statement(), null, 0)[0];
 				selectStmt = this._connection.parse_sql_string(selectSql.replace('select1', `(${select1Sql})`))[0];
 			} else {
-				// Ignore compound selector
 				selectStmt = select1Builder.get_statement();
 			}
 
-			// Run select
 			const datamodel = await async_statement_execute_select<ClipboardEntry>(
 				this._Gda,
 				this._connection,
@@ -679,7 +639,6 @@ export class GdaDatabase implements Database {
 
 			if (datamodel.get_n_rows() === 0) return [];
 
-			// DELETE FROM table WHERE id IN (select)
 			// add_subselect is not exposed as a javascript binding in Gda 5.0
 			const selectSql = this._connection.statement_to_sql(selectStmt, selectStmt.get_parameters()[1], 0)[0];
 			const [deleteStmt] = this._connection.parse_sql_string(`DELETE FROM clipboard WHERE id IN (${selectSql})`);
@@ -690,7 +649,6 @@ export class GdaDatabase implements Database {
 				this._cancellable,
 			);
 
-			// Get ids
 			const deleted: number[] = [];
 			if (rows > 0) {
 				const iter = datamodel.create_iter();
@@ -711,7 +669,6 @@ export class GdaDatabase implements Database {
 		includeWhere: boolean = true,
 		olderThanMinutes: number = 0,
 	): [SqlBuilder<ClipboardEntry>, Gda.SqlBuilderId | null] {
-		// SELECT id FROM table (WHERE NOT (pinned == true OR tag IS NOT NULL) (AND datetime < DATETIME('now', '-n minutes'))?)?
 		const builder = new this._Gda.SqlBuilder({
 			stmt_type: this._Gda.SqlStatementType.SELECT,
 		}) as SqlBuilder<ClipboardEntry>;
@@ -720,7 +677,6 @@ export class GdaDatabase implements Database {
 
 		let where = null;
 		if (includeWhere) {
-			// WHERE NOT (pinned == true OR tag IS NOT NULL)
 			where = builder.add_cond(
 				this._Gda.SqlOperatorType.NOT,
 				builder.add_cond(
@@ -738,7 +694,6 @@ export class GdaDatabase implements Database {
 				0,
 			);
 
-			// AND datetime < DATETIME('now', '-n minutes')
 			if (olderThanMinutes > 0) {
 				where = builder.add_cond(
 					this._Gda.SqlOperatorType.AND,

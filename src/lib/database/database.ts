@@ -6,29 +6,17 @@ import { int32ParamSpec, registerClass } from '../common/gjs.js';
 import type { SignalMethods } from '../common/gjs.js';
 import { ClipboardHistory } from '../common/settings.js';
 
-/**
- * Metadata.
- */
 export type Metadata = CodeMetadata | FileMetadata | LinkMetadata;
 
-/**
- * Programming language.
- */
 export interface Language {
 	id: string;
 	name: string;
 }
 
-/**
- * Code metadata.
- */
 export interface CodeMetadata {
 	language: Language | null;
 }
 
-/**
- * File operation.
- */
 export const FileOperation = {
 	Copy: 'copy',
 	Cut: 'cut',
@@ -36,25 +24,16 @@ export const FileOperation = {
 
 export type FileOperation = (typeof FileOperation)[keyof typeof FileOperation];
 
-/**
- * File metadata.
- */
 export interface FileMetadata {
 	operation: FileOperation;
 }
 
-/**
- * Link metadata.
- */
 export interface LinkMetadata {
 	title: string | null;
 	description: string | null;
 	image: string | null;
 }
 
-/**
- * Clipboard entry.
- */
 const ClipboardEntrySignals = {
 	delete: {},
 } as const;
@@ -112,13 +91,7 @@ export class ClipboardEntry extends GObject.Object {
 	}
 }
 
-/**
- * Clipboard database
- */
 export interface Database {
-	/**
-	 * Initializes the database
-	 */
 	init(): Promise<void>;
 
 	/**
@@ -127,14 +100,8 @@ export interface Database {
 	 */
 	clear(history: ClipboardHistory): Promise<number[]>;
 
-	/**
-	 * Close the connection to the database.
-	 */
 	close(): Promise<void>;
 
-	/**
-	 * Gets the entries of the database.
-	 */
 	entries(): Promise<ClipboardEntry[]>;
 
 	/**
@@ -144,13 +111,6 @@ export interface Database {
 	 */
 	selectConflict(entry: ClipboardEntry | { type: ItemType; content: string }): Promise<number | null>;
 
-	/**
-	 * Inserts an entry into the database.
-	 * @param type The type of the entry.
-	 * @param content The content of the entry.
-	 * @param metadata Metadata of the entry.
-	 * @returns The inserted entry or null if the insertion failed.
-	 */
 	insert(type: ItemType, content: string, metadata: Metadata | null): Promise<ClipboardEntry | null>;
 
 	/**
@@ -164,11 +124,6 @@ export interface Database {
 		property: K,
 	): Promise<number>;
 
-	/**
-	 * Delete an entry from the database.
-	 * @param entry The entry to delete.
-	 * @returns true if the entry was deleted, false otherwise.
-	 */
 	delete(entry: ClipboardEntry): Promise<boolean>;
 
 	/**

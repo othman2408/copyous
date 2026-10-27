@@ -77,7 +77,6 @@ export class ClipboardItem extends St.Button {
 		});
 		this._box.add_child(this._content);
 
-		// Bind properties
 		entry.bind_property(
 			'pinned',
 			this._header,
@@ -199,7 +198,6 @@ export class ClipboardItem extends St.Button {
 	}
 
 	override vfunc_clicked(clicked_button: number): void {
-		// Don't activate while editing the title
 		if (this._header.isEditing) return;
 
 		if (clicked_button === 1) {
@@ -246,44 +244,37 @@ export class ClipboardItem extends St.Button {
 		const shiftState = event.get_state() & ~Clutter.ModifierType.SHIFT_MASK;
 		const shiftAction = this.ext.shortcutsManager?.getShortcutForKeyBinding(key, shiftState);
 
-		// Pin
 		if (action === Shortcut.Pin) {
 			this.entry.pinned = !this.entry.pinned;
 			return Clutter.EVENT_STOP;
 		}
 
-		// Delete
 		if (action === Shortcut.Delete) {
 			this.delete();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Force Delete
 		if (shiftAction === Shortcut.Delete) {
 			this.forceDelete();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Edit
 		if (action === Shortcut.Edit) {
 			this.emit('edit');
 			return Clutter.EVENT_STOP;
 		}
 
-		// Edit Title
 		if (action === Shortcut.EditTitle) {
 			this._header.startEditing();
 			return Clutter.EVENT_STOP;
 		}
 
-		// Menu
 		if (action === Shortcut.Menu) {
 			const [x, y] = this.get_transformed_position();
 			this.emit('open-menu', x + 6, y, 0, 0);
 			return Clutter.EVENT_STOP;
 		}
 
-		// Action
 		const actionId = this.ext.shortcutsManager?.getActionForKeyBinding(key, event.get_state());
 		if (actionId) this.emit('activate-action', actionId);
 

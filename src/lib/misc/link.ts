@@ -22,27 +22,22 @@ async function getMetadata(ext: CopyousExtension, url: string, cancellable: Gio.
 
 	let session: Soup.Session | null = null;
 	try {
-		// Check if URL is valid
 		const uri = GLib.uri_parse(url, GLib.UriFlags.NONE);
 
-		// Create request
 		session = new Soup.Session({ user_agent: UserAgent, idle_timeout: 5, timeout: 10 });
 		const message = Soup.Message.new_from_uri('GET', uri);
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept
 		message.request_headers.append('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8');
 
-		// Send request
 		const response = await session.send_async(message, GLib.PRIORITY_DEFAULT, cancellable);
 		if (response == null) return empty;
 
-		// Check if the response is an image
 		const [contentType] = message.response_headers.get_content_type();
 		if (contentType && Gio.content_type_is_a(contentType, 'image/*')) {
 			// Since the response has already been received, write image to cache
 			const imagePath = getLinkImagePath(ext, url);
 			if (imagePath == null) return empty;
 
-			// Write to cache
 			if (!imagePath.query_exists(cancellable)) {
 				const data = await readBounded(response, 8 * 1024 * 1024, cancellable);
 				await imagePath.replace_contents_async(
@@ -57,12 +52,10 @@ async function getMetadata(ext: CopyousExtension, url: string, cancellable: Gio.
 			return { title: null, description: null, image: url };
 		}
 
-		// Download page
 		if (!contentType || !Gio.content_type_is_a(contentType, 'text/html')) return empty;
 
 		const data = await readBounded(response, 1024 * 1024, cancellable, true);
 
-		// Extract metadata
 		const text = new TextDecoder().decode(data);
 
 		// This regex is enough for most cases without having to resort to using a HTML parser
@@ -72,7 +65,6 @@ async function getMetadata(ext: CopyousExtension, url: string, cancellable: Gio.
 		for (const match of text.matchAll(metaRegex)) meta[match[1]!] = match[2]!;
 		for (const match of text.matchAll(reverseMetaRegex)) meta[match[2]!] = match[1]!;
 
-		// Title
 		let title = meta['title'] ?? meta['og:title'] ?? meta['twitter:title'] ?? null;
 		if (title == null) {
 			const titleRegex = /<title>\s*(.*?)\s*<\/title>/s;
@@ -80,10 +72,8 @@ async function getMetadata(ext: CopyousExtension, url: string, cancellable: Gio.
 			title = titleMatch ? titleMatch[1]! : null;
 		}
 
-		// Description
 		let description = meta['description'] ?? meta['og:description'] ?? meta['twitter:description'] ?? null;
 
-		// Image
 		let image =
 			meta['image'] ??
 			meta['og:image'] ??
@@ -93,14 +83,12 @@ async function getMetadata(ext: CopyousExtension, url: string, cancellable: Gio.
 			null;
 		if (image) {
 			try {
-				// Resolve relative image paths
 				image = uri.parse_relative(image, GLib.UriFlags.NONE).to_string();
 			} catch {
 				image = null;
 			}
 		}
 
-		// Escape
 		title = title ? decodeHtml(title).trim() : null;
 		description = description ? decodeHtml(description).trim() : null;
 
@@ -157,15 +145,12 @@ async function getLinkImage(
 ): Promise<Gio.File | null> {
 	let session: Soup.Session | null = null;
 	try {
-		// Check if URL is valid
 		const uri = GLib.uri_parse(url, GLib.UriFlags.NONE);
 
-		// Check if image is already cached
 		const imagePath = getLinkImagePath(ext, url);
 		if (imagePath == null) return null;
 		if (imagePath.query_exists(cancellable)) return imagePath;
 
-		// Otherwise download image
 		session = new Soup.Session({ user_agent: UserAgent, idle_timeout: 5, timeout: 10 });
 		const message = Soup.Message.new_from_uri('GET', uri);
 		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Accept
@@ -174,17 +159,14 @@ async function getLinkImage(
 			'image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5',
 		);
 
-		// Send request
 		const response = await session.send_async(message, GLib.PRIORITY_DEFAULT, cancellable);
 		if (response == null) return null;
 
 		const data = await readBounded(response, 8 * 1024 * 1024, cancellable);
 
-		// Check if the response is an image
 		const [contentType] = message.response_headers.get_content_type();
 		if (contentType == null || !contentType.startsWith('image/')) return null;
 
-		// Write to cache
 		await imagePath.replace_contents_async(data, null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, cancellable);
 		return imagePath;
 	} catch {

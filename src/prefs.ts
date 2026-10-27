@@ -37,7 +37,6 @@ import {
 } from './lib/preferences/shortcuts/searchShortcuts.js';
 
 function findHeaderBar(window: Adw.PreferencesWindow): Adw.HeaderBar | null {
-	// Depth first search for the header bar
 	const stack: Gtk.Widget[] = [window];
 	while (stack.length > 0) {
 		const widget = stack.pop()!;
@@ -59,18 +58,14 @@ export default class Preferences extends ExtensionPreferences {
 	override async fillPreferencesWindow(window: Adw.PreferencesWindow) {
 		window.default_height = 810;
 
-		// Enable search
 		window.search_enabled = true;
 
-		// Migrate settings
 		migrateSettings(this.getSettings());
 
-		// Add dependencies button to headerbar
 		const headerBar = findHeaderBar(window);
 		const dependenciesButton = new DependenciesWarningButton(this, window);
 		headerBar?.pack_end(dependenciesButton);
 
-		// General page
 		const general = new Adw.PreferencesPage({
 			name: 'general',
 			title: _('General'),
@@ -91,7 +86,6 @@ export default class Preferences extends ExtensionPreferences {
 		general.add(new LocationsGroup(this, window));
 		general.add(new VersionSettings(this, window));
 
-		// Customization page
 		const customization = new Adw.PreferencesPage({
 			name: 'customization',
 			title: _('Customization'),
@@ -108,7 +102,6 @@ export default class Preferences extends ExtensionPreferences {
 		customization.add(items);
 		customization.add(new ThemeCustomization(this));
 
-		// Shortcuts page
 		const shortcuts = new Adw.PreferencesPage({
 			name: 'shortcuts',
 			title: _('Shortcuts'),
@@ -125,26 +118,21 @@ export default class Preferences extends ExtensionPreferences {
 		shortcuts.add(new SearchNavigationShortcuts());
 		shortcuts.add(new SearchScrollShortcuts(this));
 
-		// Actions page
 		const config = await loadConfig(this);
 		const actions = new ActionsPage(this, window, config);
 		window.add(actions);
 
-		// Register icons
 		const display = Gdk.Display.get_default()!;
 		const iconTheme = Gtk.IconTheme.get_for_display(display);
 		iconTheme.add_search_path(`${this.dir.get_path()}/icons`);
 
-		// Register resources
 		const resource = Gio.resource_load(`${this.path}/resources.gresource`);
 		Gio.resources_register(resource);
 
-		// Register css
 		const provider = new Gtk.CssProvider();
 		provider.load_from_resource('/org/gnome/Shell/Extensions/copyous/style.css');
 		Gtk.StyleContext.add_provider_for_display(display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-		// Unregister resources
 		window.connect('destroy', () => {
 			Gio.resources_unregister(resource);
 			Gtk.StyleContext.remove_provider_for_display(display, provider);
@@ -162,7 +150,6 @@ export default class Preferences extends ExtensionPreferences {
 
 			return super.getSettings(schema) as Gio.Settings & CopyousSettings;
 		} catch {
-			// Fallback for when debug schema does not exist
 			return super.getSettings() as Gio.Settings & CopyousSettings;
 		}
 	}

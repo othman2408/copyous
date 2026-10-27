@@ -15,7 +15,6 @@ export async function mediaDuration(uri: string): Promise<number | null> {
 		if (!success) {
 			pipeline.set_state(Gst.State.PLAYING);
 			for (let i = 0; i < 6 && !success; i++) {
-				// Query the decoder after each short wait; one pipeline per disposable process.
 				// eslint-disable-next-line no-await-in-loop
 				await delay(50, new Gio.Cancellable());
 				[success, duration] = pipeline.query_duration(Gst.Format.TIME);

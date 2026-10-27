@@ -59,7 +59,6 @@ class FileExclusionsPage extends Adw.NavigationPage {
 		const page = new Adw.PreferencesPage();
 		toolbarView.content = page;
 
-		// File Preview Type
 		const filePreviewType = new Adw.PreferencesGroup({
 			title: _('File Preview Type'),
 		});
@@ -95,7 +94,6 @@ class FileExclusionsPage extends Adw.NavigationPage {
 		);
 		filePreviewType.add(this._thumbnailPreview);
 
-		// File Exclusion Patterns
 		const filePreviewExclusionPatternsGroup = new ExclusionsGroup(
 			window,
 			_('Add Pattern'),
@@ -197,7 +195,6 @@ export class FileItemCustomization extends Adw.ExpanderRow {
 
 		configureFileExclusions.connect('activated', () => window.push_subpage(fileExclusionsPage));
 
-		// Bind properties
 		const settings = prefs.getSettings().get_child('file-item');
 		bind_enum(settings, 'file-preview-visibility', filePreviewVisibility, 'selected');
 		bind_flags(settings, 'file-preview-types', fileExclusionsPage, 'file-preview-types');

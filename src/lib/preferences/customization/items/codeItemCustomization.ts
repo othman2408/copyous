@@ -43,7 +43,6 @@ export class CodeItemCustomization extends Adw.ExpanderRow {
 		});
 		this.add_row(textCounter);
 
-		// Bind properties
 		const settings = prefs.getSettings().get_child('code-item');
 		settings.bind('syntax-highlighting', syntaxHighlighting, 'active', Gio.SettingsBindFlags.DEFAULT);
 		settings.bind('show-line-numbers', showLineNumbers, 'active', Gio.SettingsBindFlags.DEFAULT);

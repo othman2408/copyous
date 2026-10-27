@@ -90,7 +90,6 @@ export class SearchScrollShortcuts extends Adw.PreferencesGroup {
 		const cycleItemTagRow = new ScrollShortcutRow(_('Cycle Item Tag'), !swapScrollRow.active);
 		this.add(cycleItemTagRow);
 
-		// Bind properties
 		swapScrollRow.bind_property('active', cycleItemTypeRow, 'show-ctrl', GObject.BindingFlags.DEFAULT);
 		swapScrollRow.bind_property('active', cycleItemTagRow, 'show-ctrl', GObject.BindingFlags.INVERT_BOOLEAN);
 

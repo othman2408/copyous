@@ -10,13 +10,11 @@ import { CopyousSettings } from './settings.js';
 export const Sound = {
 	None: 'none',
 
-	// Gnome sounds
 	Click: 'click',
 	Hum: 'hum',
 	String: 'string',
 	Swing: 'swing',
 
-	// Xdg sounds
 	Message: 'message',
 	MessageNewInstant: 'message-new-instant',
 	Bell: 'bell',
@@ -51,7 +49,6 @@ export class SoundManager {
 	private static initSounds(): { [sound in Sound]?: string | null } {
 		const sounds: { [sound in Sound]?: string | null } = {};
 
-		// Locate gnome sounds
 		for (const dir of GLib.get_system_data_dirs()) {
 			const gnomeSounds = Gio.File.new_build_filenamev([dir, 'sounds', 'gnome', 'default', 'alerts']);
 			if (gnomeSounds.query_exists(null)) {

@@ -140,7 +140,6 @@ export class ClipboardItemHeader extends St.BoxLayout {
 		this._headerTitle.clutter_text.ellipsize = Pango.EllipsizeMode.END;
 		this._headerContent.add_child(this._headerTitle);
 
-		// Handle double-click on title for inline editing
 		// We must stop all button events on the title to prevent them from
 		// propagating to the parent ClipboardItem button which would trigger paste
 		this._headerTitle.connect('button-press-event', (_actor, event: Clutter.Event) => {
@@ -166,7 +165,6 @@ export class ClipboardItemHeader extends St.BoxLayout {
 
 		this._headerTitle.connect('button-release-event', (_actor, event: Clutter.Event) => {
 			if (event.get_button() !== Clutter.BUTTON_PRIMARY) return Clutter.EVENT_PROPAGATE;
-			// Stop release event too
 			return Clutter.EVENT_STOP;
 		});
 
@@ -216,7 +214,6 @@ export class ClipboardItemHeader extends St.BoxLayout {
 		});
 		this.buttons.add_child(this._tagIcon);
 
-		// Bind properties
 		this.bind_property('pinned', this._pinButton, 'checked', GObject.BindingFlags.BIDIRECTIONAL);
 	}
 
@@ -361,14 +358,12 @@ export class ClipboardItemHeader extends St.BoxLayout {
 		this.updateHeaderControls();
 		this.updateTitleDisplay();
 
-		// Create an entry for editing
 		this._titleEntry = new St.Entry({
 			style_class: 'clipboard-item-title-entry',
 			text: this._customTitle || this._defaultTitle,
 			y_align: Clutter.ActorAlign.CENTER,
 		});
 
-		// Select all text
 		this._titleEntry.clutter_text.set_selection(0, -1);
 
 		this._titleEntry.clutter_text.connect('key-press-event', (_text, event: Clutter.Event) => {
@@ -389,7 +384,6 @@ export class ClipboardItemHeader extends St.BoxLayout {
 			}
 		});
 
-		// Insert entry before time label
 		this._headerContent.insert_child_below(this._titleEntry, this._timeLabel);
 		this._titleEntry.grab_key_focus();
 	}
@@ -400,13 +394,11 @@ export class ClipboardItemHeader extends St.BoxLayout {
 		this.updateHeaderControls();
 		this.updateTitleDisplay();
 
-		// Capture entry reference before clearing
 		const entry = this._titleEntry;
 		this._titleEntry = null;
 
 		if (save) {
 			const newTitle = entry.text.trim();
-			// If empty or same as default, clear custom title
 			if (newTitle === '' || newTitle === this._defaultTitle) {
 				this.customTitle = '';
 			} else {
@@ -414,10 +406,8 @@ export class ClipboardItemHeader extends St.BoxLayout {
 			}
 		}
 
-		// Remove entry from container
 		this._headerContent.remove_child(entry);
 
-		// Notify parent to restore focus
 		this.emit('editing-finished');
 	}
 

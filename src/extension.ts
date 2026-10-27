@@ -59,18 +59,14 @@ export default class CopyousExtension extends Extension {
 		this.logger = this.getLogger();
 		const error = this.logger.error.bind(this.logger);
 
-		// Highlight.js runs in a separate process.
 		this.initHljs().catch(error);
 
-		// Theme
 		this.themeManager = new ThemeManager(this);
 
-		// UI
 		this.clipboardDialog = new ClipboardDialog(this);
 		this.clipboardDialog.connectObject(
 			'notify::opened',
 			async () => {
-				// Update the history when the dialog is closed and an update was scheduled while the dialog was open
 				if (!this.clipboardDialog?.opened && this.updateHistory) {
 					this.updateHistory = false;
 					await this.entryTracker?.deleteOldest();
@@ -100,7 +96,6 @@ export default class CopyousExtension extends Extension {
 			this,
 		);
 
-		// DBus
 		this.dbus = new DbusService();
 		this.dbus.connectObject(
 			'toggle',
@@ -114,7 +109,6 @@ export default class CopyousExtension extends Extension {
 			this,
 		);
 
-		// Feedback
 		this.notificationManager = new NotificationManager(this);
 		tryCreateSoundManager(this)
 			.then((soundManager) => {
@@ -123,7 +117,6 @@ export default class CopyousExtension extends Extension {
 			})
 			.catch(error);
 
-		// Shortcuts
 		this.shortcutsManager = new ShortcutManager(this, this.clipboardDialog);
 		this.shortcutsManager.connectObject(
 			'open-clipboard-dialog',
@@ -133,7 +126,6 @@ export default class CopyousExtension extends Extension {
 			this,
 		);
 
-		// Database
 		this.entryTracker = new ClipboardEntryTracker(this);
 		this.initEntryTracker().catch(error);
 		this.initHistoryTimeout().catch(error);
@@ -148,7 +140,6 @@ export default class CopyousExtension extends Extension {
 			this,
 		);
 
-		// Clipboard Manager
 		this.clipboardManager = new ClipboardManager(this, this.entryTracker);
 		this.clipboardManager.connectObject(
 			'clipboard',
@@ -278,7 +269,6 @@ export default class CopyousExtension extends Extension {
 		await this.entryTracker?.deleteOldest();
 		if (lifecycle !== this.lifecycle || generation !== this.historyGeneration) return;
 		this.historyTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 60, () => {
-			// Do not update the history if the dialog is open
 			this.updateHistory = this.clipboardDialog?.opened ?? false;
 			if (this.updateHistory) return GLib.SOURCE_CONTINUE;
 
@@ -295,7 +285,6 @@ export default class CopyousExtension extends Extension {
 		this.entryLoadGeneration++;
 		if (this.entryLoadId) GLib.source_remove(this.entryLoadId);
 		this.entryLoadId = 0;
-		// UI
 		this.clipboardDialog?.disconnectObject(this);
 		this.clipboardDialog?.destroy();
 		this.indicator?.disconnectObject(this);
@@ -303,7 +292,6 @@ export default class CopyousExtension extends Extension {
 		this.clipboardDialog = undefined;
 		this.indicator = undefined;
 
-		// Highlight.js
 		this.processor?.destroy();
 		this.processor = undefined;
 		this.languages = [];
@@ -315,27 +303,22 @@ export default class CopyousExtension extends Extension {
 		this.processorRetryAt = 0;
 		this.hljsCallbacks = undefined;
 
-		// Theme
 		this.themeManager?.destroy();
 		this.themeManager = undefined;
 
-		// DBus
 		this.dbus?.disconnectObject(this);
 		this.dbus?.destroy();
 		this.dbus = undefined;
 
-		// Feedback
 		this.notificationManager?.destroy();
 		this.notificationManager = undefined;
 		this.soundManager?.destroy();
 		this.soundManager = undefined;
 
-		// Shortcuts
 		this.shortcutsManager?.disconnectObject(this);
 		this.shortcutsManager?.destroy();
 		this.shortcutsManager = undefined;
 
-		// Database
 		const error = this.logger.error.bind(this.logger);
 		this.databaseShutdown = this.entryTracker?.destroy().catch(error) ?? Promise.resolve();
 		this.entryTracker = undefined;
@@ -343,12 +326,10 @@ export default class CopyousExtension extends Extension {
 		if (this.historyTimeoutId >= 0) GLib.source_remove(this.historyTimeoutId);
 		this.historyTimeoutId = -1;
 
-		// Clipboard Manager
 		this.clipboardManager?.disconnectObject(this);
 		this.clipboardManager?.destroy();
 		this.clipboardManager = undefined;
 
-		// Globals
 		this.settings?.disconnectObject(this);
 		this.settings = undefined!;
 		this.logger = undefined!;
@@ -366,7 +347,6 @@ export default class CopyousExtension extends Extension {
 
 			return super.getSettings(schema) as Gio.Settings & CopyousSettings;
 		} catch {
-			// Fallback for when debug schema does not exist
 			return super.getSettings() as Gio.Settings & CopyousSettings;
 		}
 	}

@@ -99,7 +99,6 @@ class AddExclusionPatternDialog extends Adw.AlertDialog {
 		});
 		this.extra_child = box;
 
-		// Pattern
 		const patternBox = new Gtk.ListBox({ css_classes: ['boxed-list'] });
 		box.append(patternBox);
 
@@ -119,7 +118,6 @@ class AddExclusionPatternDialog extends Adw.AlertDialog {
 			this._patternEntry.add_suffix(syntaxButton);
 		}
 
-		// Test Pattern
 		const testGroup = new Adw.PreferencesGroup({
 			description: _('You can test your pattern below'),
 		});
@@ -168,7 +166,6 @@ class AddExclusionPatternDialog extends Adw.AlertDialog {
 		this._hidden.append(new Gtk.Label({ label: _('Preview Hidden') }));
 		testLegend.append(this._hidden);
 
-		// Spacer
 		testLegend.append(new Gtk.Label({ label: ' ', opacity: 0 }));
 	}
 

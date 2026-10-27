@@ -155,7 +155,6 @@ export class HistorySettings extends Adw.PreferencesGroup {
 		});
 		this.add(timeLimit);
 
-		// Bind properties
 		this._settings = prefs.getSettings();
 		this._settings.bind('database-location', this, 'database-location', Gio.SettingsBindFlags.DEFAULT);
 		bind_enum(this._settings, 'clipboard-history', this._clipboardHistory, 'selected');
@@ -167,7 +166,6 @@ export class HistorySettings extends Adw.PreferencesGroup {
 		makeResettable(historyLength, this._settings, 'history-length');
 		makeResettable(timeLimit, this._settings, 'history-time');
 
-		// Check gda
 		checkGda(this.prefs)
 			.then(this.initializeDatabaseBackend.bind(this))
 			.catch(() => {});

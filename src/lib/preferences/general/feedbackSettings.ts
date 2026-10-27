@@ -140,7 +140,6 @@ class SoundChooserPage extends Adw.NavigationPage {
 		const page = new Adw.PreferencesPage();
 		toolbarView.content = page;
 
-		// Volume row
 		const volumeGroup = new Adw.PreferencesGroup();
 		page.add(volumeGroup);
 
@@ -149,11 +148,9 @@ class SoundChooserPage extends Adw.NavigationPage {
 
 		this.bind_property('volume', this._volumeRow.slider.adjustment, 'value', GObject.BindingFlags.BIDIRECTIONAL);
 
-		// Sound chooser
 		const soundChooser = new Adw.PreferencesGroup();
 		page.add(soundChooser);
 
-		// None
 		const noneRow = new CheckRow(_('None'), Sound.None);
 		noneRow.active = true;
 
@@ -265,7 +262,6 @@ export class FeedbackSettings extends Adw.PreferencesGroup {
 
 		playSound.connect('activated', () => this._soundChooserPage && window.push_subpage(this._soundChooserPage));
 
-		// Bind properties
 		const settings: CopyousSettings = prefs.getSettings();
 		bind_enum(settings, 'indicator-display', indicatorDisplay, 'selected');
 		settings.bind('wiggle-indicator', wiggleIndicator, 'active', Gio.SettingsBindFlags.DEFAULT);
@@ -281,7 +277,6 @@ export class FeedbackSettings extends Adw.PreferencesGroup {
 
 		makeResettable(playSound, settings, 'sound', 'volume');
 
-		// Check if GSound is installed
 		this.connect('notify::gsound', async () => {
 			if (this.gsound) {
 				const GSound = (await import('gi://GSound')).default;

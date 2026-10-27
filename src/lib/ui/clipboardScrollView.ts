@@ -51,7 +51,6 @@ export class ClipboardScrollView extends St.ScrollView {
 		this.connect('notify::width', this.scrollbarWorkaround.bind(this));
 		this._scrollContainer.connect('notify::width', this.scrollbarWorkaround.bind(this));
 
-		// Connect properties
 		this.ext.settings.connectObject(
 			'changed::show-scrollbar',
 			this.updateScrollbar.bind(this),
@@ -139,13 +138,11 @@ export class ClipboardScrollView extends St.ScrollView {
 	override vfunc_key_press_event(event: Clutter.Event): boolean {
 		const key = event.get_key_symbol();
 
-		// Home
 		if (key === Clutter.KEY_Home) {
 			this._scrollContainer.selectItem(0);
 			return Clutter.EVENT_STOP;
 		}
 
-		// End
 		if (key === Clutter.KEY_End) {
 			this._scrollContainer.selectLast();
 			return Clutter.EVENT_STOP;
